@@ -14,12 +14,6 @@ __pycache__/
 dining_data.json
 dining_data_clean.csv
 feedback.csv
-ml_*.csv
-
-# ML Model files
-*.pkl
-recommendation_model.pkl
-feature_names.pkl
 
 # IDE
 .vscode/
