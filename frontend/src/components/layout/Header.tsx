@@ -21,19 +21,26 @@ export function Header() {
     <header className="bg-berkeley text-white px-6 py-4 shadow-md">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🍽️</span>
-          <h1 className="text-xl font-semibold">BerkeleyBites</h1>
+          <div className="w-10 h-10 bg-berkeley-gold rounded-full flex items-center justify-center">
+            <span className="text-xl">🍽️</span>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">
+              Berkeley<span className="text-berkeley-gold">Bites</span>
+            </h1>
+            <p className="text-xs text-white/60 -mt-0.5">UC Berkeley Dining</p>
+          </div>
         </div>
 
         <div className="flex items-center gap-6 text-sm">
           {weather && (
-            <div className="hidden sm:flex items-center gap-2 text-white/90">
-              <span>{Math.round(weather.temperature_f)}°F</span>
-              <span className="text-white/60">|</span>
-              <span>{weather.conditions}</span>
+            <div className="hidden sm:flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full">
+              <span className="text-berkeley-gold font-medium">{Math.round(weather.temperature_f)}°F</span>
+              <span className="text-white/40">•</span>
+              <span className="text-white/90">{weather.conditions}</span>
             </div>
           )}
-          <time className="text-white/80">{today}</time>
+          <time className="text-white/70 hidden md:block">{today}</time>
         </div>
       </div>
     </header>

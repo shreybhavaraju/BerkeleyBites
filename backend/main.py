@@ -20,7 +20,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from .models import (
     UserProfile, MoodUpdate, Dish, MenuSummary,
     FeedbackSubmit, FeedbackStats,
-    ChatMessage, ChatResponse, WeatherResponse
+    ChatMessage, ChatResponse, RecommendationResponse, AgentSummary,
+    WeatherResponse
 )
 
 # Import existing modules from parent directory
@@ -117,15 +118,6 @@ def filter_by_profile(df: pd.DataFrame, profile: UserProfile) -> pd.DataFrame:
 
     if profile.is_kosher:
         filtered = filtered[filtered['is_kosher'] == True]
-
-    if not profile.eats_pork:
-        filtered = filtered[filtered['has_pork'] == False]
-
-    if not profile.eats_fish:
-        filtered = filtered[filtered['has_fish'] == False]
-
-    if not profile.eats_shellfish:
-        filtered = filtered[filtered['has_shellfish'] == False]
 
     if profile.avoid_milk:
         filtered = filtered[filtered['has_milk'] == False]
@@ -461,7 +453,7 @@ async def get_dish_feedback(
 # Chat Endpoints
 # ===========================================
 
-@app.post("/api/chat", response_model=ChatResponse)
+@app.post("/api/chat")
 async def chat(
     message: ChatMessage,
     user_id: str = Query("default", description="User ID")
@@ -478,14 +470,28 @@ async def chat(
     if command.lower().startswith("/recommend"):
         parts = command.split(maxsplit=1)
         meal = parts[1] if len(parts) > 1 else ""
-        response = get_recommendation(query=command, meal=meal, session_id=session_id)
+        result = get_recommendation(query=command, meal=meal, session_id=session_id)
+
+        # Convert dict summaries to AgentSummary models
+        agent_summaries = {}
+        for key, summary in result.get("agent_summaries", {}).items():
+            agent_summaries[key] = AgentSummary(
+                icon=summary["icon"],
+                title=summary["title"],
+                points=summary["points"]
+            )
+
+        return RecommendationResponse(
+            agent_summaries=agent_summaries,
+            recommendation=result["recommendation"],
+            session_id=session_id
+        )
     else:
         response = process_command(command, session_id=session_id)
-
-    return ChatResponse(
-        response=response,
-        session_id=session_id
-    )
+        return ChatResponse(
+            response=response,
+            session_id=session_id
+        )
 
 
 # ===========================================

@@ -18,11 +18,6 @@ class UserProfile(BaseModel):
     is_pescatarian: bool = False
     is_halal: bool = False
     is_kosher: bool = False
-    eats_chicken: bool = True
-    eats_beef: bool = True
-    eats_pork: bool = True
-    eats_fish: bool = True
-    eats_shellfish: bool = True
     avoid_milk: bool = False
     avoid_eggs: bool = False
     avoid_gluten: bool = False
@@ -129,6 +124,20 @@ class ChatMessage(BaseModel):
 class ChatResponse(BaseModel):
     """Response from the AI chat."""
     response: str
+    session_id: str
+
+
+class AgentSummary(BaseModel):
+    """Summary from a single agent."""
+    icon: str
+    title: str
+    points: list[str]
+
+
+class RecommendationResponse(BaseModel):
+    """Response from the AI recommendation with agent summaries."""
+    agent_summaries: dict[str, AgentSummary]
+    recommendation: str
     session_id: str
 
 

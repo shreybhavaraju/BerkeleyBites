@@ -5,6 +5,7 @@ import type {
   FeedbackStats,
   DishFeedback,
   ChatResponse,
+  RecommendationResponse,
   Weather,
   MoodOption,
 } from '../types';
@@ -121,14 +122,25 @@ export async function getDishFeedback(dishId: number): Promise<DishFeedback> {
 }
 
 // Chat API
-export async function sendChatMessage(message: string): Promise<ChatResponse> {
-  return fetchApi<ChatResponse>(`/chat?user_id=${getUserId()}`, {
-    method: 'POST',
-    body: JSON.stringify({
-      message,
-      session_id: getUserId(),
-    }),
-  });
+export async function sendChatMessage(
+  message: string
+): Promise<ChatResponse | RecommendationResponse> {
+  return fetchApi<ChatResponse | RecommendationResponse>(
+    `/chat?user_id=${getUserId()}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        session_id: getUserId(),
+      }),
+    }
+  );
+}
+
+export function isRecommendationResponse(
+  response: ChatResponse | RecommendationResponse
+): response is RecommendationResponse {
+  return 'agent_summaries' in response && 'recommendation' in response;
 }
 
 // Weather API

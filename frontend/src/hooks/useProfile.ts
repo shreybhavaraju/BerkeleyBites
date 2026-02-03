@@ -28,17 +28,6 @@ export function useProfile() {
     if (profile.is_halal) summary.push('Halal');
     if (profile.is_kosher) summary.push('Kosher');
 
-    const avoided: string[] = [];
-    if (!profile.eats_chicken) avoided.push('chicken');
-    if (!profile.eats_beef) avoided.push('beef');
-    if (!profile.eats_pork) avoided.push('pork');
-    if (!profile.eats_fish) avoided.push('fish');
-    if (!profile.eats_shellfish) avoided.push('shellfish');
-
-    if (avoided.length > 0) {
-      summary.push(`No ${avoided.join(', ')}`);
-    }
-
     const allergens: string[] = [];
     if (profile.avoid_milk) allergens.push('dairy');
     if (profile.avoid_eggs) allergens.push('eggs');
