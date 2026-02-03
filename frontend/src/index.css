@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-berkeley: #003262;
+  --color-berkeley-light: #3b7ea1;
+  --color-success: #28a745;
+  --color-error: #dc3545;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
