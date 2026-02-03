@@ -1,10 +1,20 @@
 @import "tailwindcss";
 
 @theme {
+  /* Berkeley Official Colors */
   --color-berkeley: #003262;
   --color-berkeley-light: #3b7ea1;
+  --color-berkeley-gold: #FDB515;
+  --color-berkeley-gold-light: #ffc520;
+
+  /* Status Colors */
   --color-success: #28a745;
   --color-error: #dc3545;
+
+  /* Extended Berkeley Palette */
+  --color-founders-rock: #2D637F;
+  --color-california-gold: #C4820E;
+  --color-medalist: #C09853;
 }
 
 body {
@@ -16,4 +26,22 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+/* Custom scrollbar for Berkeley theme */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3b7ea1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #003262;
 }

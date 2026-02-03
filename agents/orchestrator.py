@@ -6,6 +6,7 @@ to provide personalized food recommendations.
 """
 
 import os
+import re
 from typing import Optional
 import pandas as pd
 from dotenv import load_dotenv
@@ -153,6 +154,123 @@ def gather_agent_context(meal: str = "") -> dict:
     return context
 
 
+def get_agent_summaries(context: dict, meal: str = "") -> dict:
+    """
+    Extract medium-detail summaries from each agent's output.
+
+    Args:
+        context: Dictionary from gather_agent_context()
+        meal: Optional meal period filter
+
+    Returns:
+        Dictionary with structured summaries for each agent.
+    """
+    summaries = {}
+
+    # Mood Summary
+    mood_text = context.get("mood", "")
+    mood_points = []
+    if "happy" in mood_text.lower():
+        mood_points = ["You're feeling happy today", "Great time to try something new!"]
+    elif "grumpy" in mood_text.lower():
+        mood_points = ["You're feeling a bit grumpy", "Comfort food might help lift your spirits"]
+    elif "stressed" in mood_text.lower():
+        mood_points = ["You're feeling stressed", "Something warm and soothing could help"]
+    elif "tired" in mood_text.lower():
+        mood_points = ["You're feeling tired", "Energy-boosting foods recommended"]
+    elif "adventurous" in mood_text.lower():
+        mood_points = ["You're feeling adventurous!", "Perfect day to explore new cuisines"]
+    else:
+        mood_points = [mood_text[:100] if mood_text else "Mood not detected"]
+
+    summaries["mood"] = {
+        "icon": "😊",
+        "title": "Mood Analysis",
+        "points": mood_points
+    }
+
+    # Weather Summary
+    temp_text = context.get("temperature", "")
+    weather_points = []
+    if "°F" in temp_text or "degrees" in temp_text.lower():
+        # Extract temperature info
+        temp_match = re.search(r'(\d+(?:\.\d+)?)\s*°?F', temp_text)
+        if temp_match:
+            temp = float(temp_match.group(1))
+            if temp < 55:
+                weather_points = [f"Berkeley: {temp:.0f}°F, Cool weather", "Warm soups and hot dishes recommended"]
+            elif temp < 70:
+                weather_points = [f"Berkeley: {temp:.0f}°F, Pleasant weather", "Perfect for any food type"]
+            else:
+                weather_points = [f"Berkeley: {temp:.0f}°F, Warm weather", "Light, refreshing foods recommended"]
+        else:
+            weather_points = [temp_text[:80] if temp_text else "Weather data unavailable"]
+    else:
+        weather_points = [temp_text[:80] if temp_text else "Weather data unavailable"]
+
+    summaries["weather"] = {
+        "icon": "🌡️",
+        "title": "Weather Check",
+        "points": weather_points
+    }
+
+    # Preferences Summary
+    pref_text = context.get("preferences", "")
+    pref_points = []
+    if "liked" in pref_text.lower() or "enjoyed" in pref_text.lower():
+        # Extract liked dishes/categories
+        lines = pref_text.split('\n')
+        for line in lines[:3]:
+            if line.strip():
+                pref_points.append(line.strip()[:60])
+    elif "no history" in pref_text.lower() or "no feedback" in pref_text.lower():
+        pref_points = ["No taste history yet", "Rate dishes to get personalized recommendations"]
+    else:
+        pref_points = [pref_text[:80] if pref_text else "Building your taste profile"]
+
+    if not pref_points:
+        pref_points = ["Analyzing your preferences", "Rate dishes to improve recommendations"]
+
+    summaries["preferences"] = {
+        "icon": "📊",
+        "title": "Your Preferences",
+        "points": pref_points[:3]
+    }
+
+    # Menu Summary
+    dishes_text = context.get("dishes", "")
+    menu_points = []
+    if "dishes available" in dishes_text.lower() or "found" in dishes_text.lower():
+        # Count dishes and halls
+        count_match = re.search(r'(\d+)\s*dishes', dishes_text.lower())
+        dish_count = count_match.group(1) if count_match else "Multiple"
+
+        # Extract dining halls
+        halls = []
+        for hall in ["Crossroads", "Cafe 3", "Clark Kerr", "Foothill"]:
+            if hall.lower() in dishes_text.lower():
+                halls.append(hall)
+
+        menu_points.append(f"Found {dish_count} dishes matching your profile")
+        if halls:
+            menu_points.append(f"Available at: {', '.join(halls[:3])}")
+        if meal:
+            menu_points.append(f"Filtered for {meal}")
+    else:
+        menu_points = [dishes_text[:80] if dishes_text else "Scanning today's menu"]
+
+    if not menu_points:
+        menu_points = ["Scanning available options"]
+
+    summaries["menu"] = {
+        "icon": "📋",
+        "title": "Menu Scan",
+        "points": menu_points[:3]
+    }
+
+    return summaries
+
+
 def build_recommendation_prompt(context: dict, meal: str = "") -> str:
     """Build a comprehensive prompt with all agent context."""
 
@@ -196,7 +314,7 @@ def get_recommendation(
     query: str,
     meal: str = "",
     session_id: str = "default"
-) -> str:
+) -> dict:
     """
     Get a food recommendation using the multi-agent system.
 
@@ -213,7 +331,7 @@ def get_recommendation(
         session_id: Session ID for conversation history
 
     Returns:
-        The recommendation response string.
+        Dictionary with agent_summaries and recommendation.
     """
     history = get_session_history(session_id)
     llm = get_llm()
@@ -221,6 +339,9 @@ def get_recommendation(
     try:
         # Gather context from all sub-agents
         context = gather_agent_context(meal)
+
+        # Extract summaries for UI display
+        summaries = get_agent_summaries(context, meal)
 
         # Build the comprehensive prompt
         system_prompt = build_recommendation_prompt(context, meal)
@@ -247,13 +368,23 @@ def get_recommendation(
         history.add_user_message(query)
         history.add_ai_message(response_text)
 
-        return response_text
+        return {
+            "agent_summaries": summaries,
+            "recommendation": response_text
+        }
 
     except Exception as e:
         error_msg = str(e)
         if "rate limit" in error_msg.lower():
-            return "The AI service is currently busy. Please try again in a moment."
-        return f"Error generating recommendation: {error_msg}"
+            error_response = "The AI service is currently busy. Please try again in a moment."
+        else:
+            error_response = f"Error generating recommendation: {error_msg}"
+
+        # Return error with empty summaries
+        return {
+            "agent_summaries": {},
+            "recommendation": error_response
+        }
 
 
 def clear_orchestrator_history(session_id: str) -> None:

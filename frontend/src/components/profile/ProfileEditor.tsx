@@ -38,8 +38,6 @@ export function ProfileEditor() {
     await setProfile({ ...profile, [field]: value });
   };
 
-  const isVegetarianLike = profile.is_vegetarian || profile.is_vegan;
-
   return (
     <div className="mt-3">
       <button
@@ -90,47 +88,6 @@ export function ProfileEditor() {
               />
             </div>
           </div>
-
-          {/* Specific Meats */}
-          {!isVegetarianLike && (
-            <div>
-              <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                Meats You Eat
-              </h4>
-              <div className="space-y-2">
-                <CheckboxItem
-                  label="Chicken"
-                  emoji="🍗"
-                  checked={profile.eats_chicken}
-                  onChange={(v) => handleChange('eats_chicken', v)}
-                />
-                <CheckboxItem
-                  label="Beef"
-                  emoji="🥩"
-                  checked={profile.eats_beef}
-                  onChange={(v) => handleChange('eats_beef', v)}
-                />
-                <CheckboxItem
-                  label="Pork"
-                  emoji="🥓"
-                  checked={profile.eats_pork}
-                  onChange={(v) => handleChange('eats_pork', v)}
-                />
-                <CheckboxItem
-                  label="Fish"
-                  emoji="🐟"
-                  checked={profile.eats_fish}
-                  onChange={(v) => handleChange('eats_fish', v)}
-                />
-                <CheckboxItem
-                  label="Shellfish"
-                  emoji="🦐"
-                  checked={profile.eats_shellfish}
-                  onChange={(v) => handleChange('eats_shellfish', v)}
-                />
-              </div>
-            </div>
-          )}
 
           {/* Allergens */}
           <div>

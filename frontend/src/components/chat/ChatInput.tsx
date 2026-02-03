@@ -9,7 +9,7 @@ const COMMAND_HINTS = [
   { cmd: '/recommend', desc: 'Get personalized recommendations' },
   { cmd: '/recommend lunch', desc: 'Recommendations for specific meal' },
   { cmd: '/why [dish]', desc: 'Explain why a dish fits you' },
-  { cmd: '/search [query]', desc: 'Search for nutrition info' },
+  { cmd: '/similar [dish]', desc: 'Find similar dishes on menu' },
   { cmd: '/help', desc: 'Show all commands' },
 ];
 

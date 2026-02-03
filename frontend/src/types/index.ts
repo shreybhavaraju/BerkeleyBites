@@ -5,11 +5,6 @@ export interface UserProfile {
   is_pescatarian: boolean;
   is_halal: boolean;
   is_kosher: boolean;
-  eats_chicken: boolean;
-  eats_beef: boolean;
-  eats_pork: boolean;
-  eats_fish: boolean;
-  eats_shellfish: boolean;
   avoid_milk: boolean;
   avoid_eggs: boolean;
   avoid_gluten: boolean;
@@ -24,11 +19,6 @@ export const DEFAULT_PROFILE: UserProfile = {
   is_pescatarian: false,
   is_halal: false,
   is_kosher: false,
-  eats_chicken: true,
-  eats_beef: true,
-  eats_pork: true,
-  eats_fish: true,
-  eats_shellfish: true,
   avoid_milk: false,
   avoid_eggs: false,
   avoid_gluten: false,
@@ -99,11 +89,33 @@ export interface DishFeedback {
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  agentSummaries?: Record<string, AgentSummary>;
+  isRecommendation?: boolean;
 }
 
 export interface ChatResponse {
   response: string;
   session_id: string;
+}
+
+export interface AgentSummary {
+  icon: string;
+  title: string;
+  points: string[];
+}
+
+export interface RecommendationResponse {
+  agent_summaries: Record<string, AgentSummary>;
+  recommendation: string;
+  session_id: string;
+}
+
+export type AgentStepStatus = 'pending' | 'loading' | 'complete';
+
+export interface AgentStep {
+  id: string;
+  label: string;
+  status: AgentStepStatus;
 }
 
 // Weather Types

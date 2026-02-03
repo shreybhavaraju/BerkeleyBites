@@ -100,19 +100,6 @@ def get_user_profile_str() -> str:
     if profile.get("is_kosher"):
         restrictions.append("KOSHER")
 
-    if not profile.get("is_vegetarian") and not profile.get("is_vegan"):
-        avoided = []
-        if not profile.get("eats_chicken", True):
-            avoided.append("chicken")
-        if not profile.get("eats_beef", True):
-            avoided.append("beef")
-        if not profile.get("eats_pork", True):
-            avoided.append("pork")
-        if not profile.get("eats_fish", True):
-            avoided.append("fish")
-        if avoided:
-            restrictions.append(f"Avoids: {', '.join(avoided)}")
-
     allergens = []
     if profile.get("avoid_milk"):
         allergens.append("dairy")
@@ -276,11 +263,6 @@ def build_system_prompt(command_type: str, meal: str = "") -> str:
 ## Your Task
 Explain whether the requested dish is a good choice for this user based on their dietary profile and preferences. Be specific about ingredients and restrictions."""
 
-    elif command_type == "search":
-        base_prompt += """
-## Your Task
-Use your knowledge to answer the user's food-related question. Perplexity has built-in web search, so you can provide current information about nutrition, recipes, etc."""
-
     elif command_type == "similar":
         menu = get_menu_str()
         base_prompt += f"""
@@ -328,7 +310,6 @@ def process_command(command: str, session_id: str = "default") -> str:
 `/recommend` - Get personalized meal recommendations
 `/recommend [meal]` - Recommendations for specific meal (breakfast/lunch/dinner)
 `/why [dish]` - Explain why a dish is or isn't good for you
-`/search [query]` - Search for nutrition info or food facts
 `/similar [dish]` - Find similar dishes on today's menu
 `/preferences` - Show your current session preferences
 `/clear` - Clear conversation and start fresh
@@ -361,13 +342,6 @@ def process_command(command: str, session_id: str = "default") -> str:
             return "Usage: `/why [dish name]` - e.g., `/why Pizza`"
         command_type = "why"
         user_message = f"Is '{parts[1]}' a good choice for me? Why or why not?"
-
-    elif command.lower().startswith("/search"):
-        parts = command.split(maxsplit=1)
-        if len(parts) < 2:
-            return "Usage: `/search [query]` - e.g., `/search tofu protein content`"
-        command_type = "search"
-        user_message = parts[1]
 
     elif command.lower().startswith("/similar"):
         parts = command.split(maxsplit=1)
