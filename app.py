@@ -5,8 +5,11 @@ from datetime import date, datetime
 import os
 import random
 
-# Import food agent
+# Import food agent (for non-recommend commands)
 from food_agent import set_context, process_command, clear_session_history
+
+# Import multi-agent orchestrator (for /recommend)
+from agents import set_orchestrator_context, get_recommendation
 
 # ============================================
 # PAGE SETUP
@@ -324,6 +327,41 @@ else:
     st.sidebar.write("_No feedback yet_")
 
 # ============================================
+# MOOD SELECTION
+# ============================================
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### How are you feeling?")
+
+# Mood options with descriptions
+mood_options = {
+    "happy": "Feeling great, open to anything!",
+    "grumpy": "Need some comfort food",
+    "stressed": "Looking for something easy and calming",
+    "tired": "Need an energy boost",
+    "adventurous": "Ready to try something new!",
+}
+
+# Initialize mood in session state
+if 'user_mood' not in st.session_state:
+    st.session_state.user_mood = "happy"
+
+selected_mood = st.sidebar.selectbox(
+    "Current mood:",
+    options=list(mood_options.keys()),
+    index=list(mood_options.keys()).index(st.session_state.user_mood),
+    format_func=lambda x: f"{x.capitalize()}",
+    key="mood_selector",
+    label_visibility="collapsed"
+)
+
+# Update session state
+st.session_state.user_mood = selected_mood
+
+# Show mood description
+st.sidebar.caption(mood_options[selected_mood])
+
+# ============================================
 # FILTERING LOGIC
 # ============================================
 
@@ -386,12 +424,21 @@ filtered_df = filter_by_profile(clean_df, st.session_state.user_profile)
 # SET AGENT CONTEXT
 # ============================================
 
-# Update agent context with current data
+# Update agent context with current data (for legacy food_agent)
 set_context(
     menu_df=filtered_df,
     feedback_df=load_feedback(),
     user_profile=st.session_state.user_profile,
     user_id=get_user_id()
+)
+
+# Update orchestrator context (for multi-agent system)
+set_orchestrator_context(
+    menu_df=filtered_df,
+    feedback_df=load_feedback(),
+    user_profile=st.session_state.user_profile,
+    user_id=get_user_id(),
+    user_mood=st.session_state.user_mood
 )
 
 # ============================================
@@ -415,9 +462,22 @@ with st.sidebar.form(key="agent_form", clear_on_submit=True):
     )
     submit_button = st.form_submit_button("Ask")
 
+def process_user_command(command: str, session_id: str) -> str:
+    """Route commands to appropriate handler (orchestrator for /recommend, food_agent for others)."""
+    command = command.strip()
+
+    # Route /recommend to the multi-agent orchestrator
+    if command.lower().startswith("/recommend"):
+        parts = command.split(maxsplit=1)
+        meal = parts[1] if len(parts) > 1 else ""
+        return get_recommendation(query=command, meal=meal, session_id=session_id)
+
+    # All other commands go to the legacy food_agent
+    return process_command(command, session_id=session_id)
+
 if submit_button and agent_input:
     with st.spinner("Thinking..."):
-        response = process_command(agent_input, session_id=get_user_id())
+        response = process_user_command(agent_input, session_id=get_user_id())
         st.session_state.agent_messages.append({"role": "user", "content": agent_input})
         st.session_state.agent_messages.append({"role": "assistant", "content": response})
 
@@ -475,7 +535,15 @@ if main_submit and main_input:
             user_profile=st.session_state.user_profile,
             user_id=get_user_id()
         )
-        response = process_command(main_input, session_id=get_user_id())
+        # Also refresh orchestrator context
+        set_orchestrator_context(
+            menu_df=filtered_df,
+            feedback_df=load_feedback(),
+            user_profile=st.session_state.user_profile,
+            user_id=get_user_id(),
+            user_mood=st.session_state.user_mood
+        )
+        response = process_user_command(main_input, session_id=get_user_id())
         st.session_state.agent_messages.append({"role": "user", "content": main_input})
         st.session_state.agent_messages.append({"role": "assistant", "content": response})
         st.rerun()
