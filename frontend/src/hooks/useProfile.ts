@@ -3,7 +3,7 @@ import type { UserProfile } from '../types';
 import { useApp } from '../context/AppContext';
 
 export function useProfile() {
-  const { profile, setProfile, isProfileLoading, mood, moodOptions, setMood } = useApp();
+  const { profile, setProfile, isProfileLoading } = useApp();
 
   const updateProfileField = useCallback(
     async <K extends keyof UserProfile>(field: K, value: UserProfile[K]) => {
@@ -48,8 +48,5 @@ export function useProfile() {
     updateProfileField,
     isLoading: isProfileLoading,
     getProfileSummary,
-    mood,
-    moodOptions,
-    setMood,
   };
 }

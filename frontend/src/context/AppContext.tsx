@@ -43,6 +43,7 @@ interface AppState {
   // Chat
   chatMessages: ChatMessage[];
   addChatMessage: (message: ChatMessage) => void;
+  updateChatMessage: (index: number, updates: Partial<ChatMessage>) => void;
   clearChat: () => void;
   isChatLoading: boolean;
   setIsChatLoading: (loading: boolean) => void;
@@ -165,6 +166,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setChatMessages((prev) => [...prev, message]);
   }, []);
 
+  const updateChatMessage = useCallback((index: number, updates: Partial<ChatMessage>) => {
+    setChatMessages((prev) =>
+      prev.map((msg, i) => (i === index ? { ...msg, ...updates } : msg))
+    );
+  }, []);
+
   const clearChat = useCallback(() => {
     setChatMessages([]);
   }, []);
@@ -186,6 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refreshFeedbackStats,
     chatMessages,
     addChatMessage,
+    updateChatMessage,
     clearChat,
     isChatLoading,
     setIsChatLoading,

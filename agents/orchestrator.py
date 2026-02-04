@@ -154,31 +154,37 @@ def gather_agent_context(meal: str = "") -> dict:
     return context
 
 
-def get_agent_summaries(context: dict, meal: str = "") -> dict:
+def get_agent_summaries(context: dict, meal: str = "", question_context: Optional[dict] = None) -> dict:
     """
     Extract medium-detail summaries from each agent's output.
 
     Args:
         context: Dictionary from gather_agent_context()
         meal: Optional meal period filter
+        question_context: Optional context from user's question answers
 
     Returns:
         Dictionary with structured summaries for each agent.
     """
     summaries = {}
+    qc = question_context or {}
 
-    # Mood Summary
+    # Mood Summary - use question answer if available
+    mood_value = qc.get("mood", "")
     mood_text = context.get("mood", "")
+
     mood_points = []
-    if "happy" in mood_text.lower():
+    mood_to_check = mood_value.lower() if mood_value else mood_text.lower()
+
+    if "happy" in mood_to_check:
         mood_points = ["You're feeling happy today", "Great time to try something new!"]
-    elif "grumpy" in mood_text.lower():
+    elif "grumpy" in mood_to_check:
         mood_points = ["You're feeling a bit grumpy", "Comfort food might help lift your spirits"]
-    elif "stressed" in mood_text.lower():
+    elif "stressed" in mood_to_check:
         mood_points = ["You're feeling stressed", "Something warm and soothing could help"]
-    elif "tired" in mood_text.lower():
+    elif "tired" in mood_to_check:
         mood_points = ["You're feeling tired", "Energy-boosting foods recommended"]
-    elif "adventurous" in mood_text.lower():
+    elif "adventurous" in mood_to_check:
         mood_points = ["You're feeling adventurous!", "Perfect day to explore new cuisines"]
     else:
         mood_points = [mood_text[:100] if mood_text else "Mood not detected"]
@@ -188,6 +194,49 @@ def get_agent_summaries(context: dict, meal: str = "") -> dict:
         "title": "Mood Analysis",
         "points": mood_points
     }
+
+    # Craving Summary - from question answers
+    if qc.get("craving"):
+        craving = qc["craving"]
+        craving_map = {
+            "comfort": ["Looking for comfort food", "Warm, hearty dishes preferred"],
+            "healthy": ["Craving something healthy", "Fresh, nutritious options in mind"],
+            "quick": ["Want a quick bite", "Fast, convenient options prioritized"],
+            "filling": ["Hungry for a big meal", "Substantial portions needed"],
+        }
+        summaries["craving"] = {
+            "icon": "🍽️",
+            "title": "Food Craving",
+            "points": craving_map.get(craving, [f"Craving: {craving}"])
+        }
+
+    # Spice Summary - from question answers
+    if qc.get("spice_level"):
+        spice = qc["spice_level"]
+        spice_map = {
+            "mild": ["Keeping it mild today", "Gentle flavors preferred"],
+            "medium": ["Open to some kick", "Moderate spice welcome"],
+            "spicy": ["Bringing the heat!", "Spicy dishes preferred"],
+        }
+        summaries["spice"] = {
+            "icon": "🌶️",
+            "title": "Spice Level",
+            "points": spice_map.get(spice, [f"Spice preference: {spice}"])
+        }
+
+    # Time Summary - from question answers
+    if qc.get("time_constraint"):
+        time_val = qc["time_constraint"]
+        time_map = {
+            "rush": ["In a hurry", "Quick service spots prioritized"],
+            "normal": ["Normal mealtime", "Standard dining options"],
+            "leisurely": ["Taking your time", "Sit-down options work well"],
+        }
+        summaries["time"] = {
+            "icon": "⏰",
+            "title": "Time Available",
+            "points": time_map.get(time_val, [f"Time: {time_val}"])
+        }
 
     # Weather Summary
     temp_text = context.get("temperature", "")
@@ -214,11 +263,49 @@ def get_agent_summaries(context: dict, meal: str = "") -> dict:
         "points": weather_points
     }
 
-    # Preferences Summary
+    # Preferences Summary - Parse the taste preferences output for specific data
     pref_text = context.get("preferences", "")
     pref_points = []
-    if "liked" in pref_text.lower() or "enjoyed" in pref_text.lower():
-        # Extract liked dishes/categories
+
+    # Check for new user or limited history
+    if "no feedback history" in pref_text.lower() or "new user" in pref_text.lower():
+        pref_points = ["New user - no taste history yet", "Rate dishes to personalize recommendations!"]
+    elif "limited feedback" in pref_text.lower():
+        pref_points = ["Building taste profile", "Rate more dishes for better recommendations"]
+    else:
+        # Extract specific data from preferences
+        # Look for rating count
+        rating_match = re.search(r'based on (\d+) ratings', pref_text.lower())
+        if rating_match:
+            rating_count = rating_match.group(1)
+            pref_points.append(f"Analyzed {rating_count} of your past ratings")
+
+        # Look for liked count
+        liked_match = re.search(r'liked dishes \((\d+)\)', pref_text.lower())
+        if liked_match:
+            liked_count = liked_match.group(1)
+            pref_points.append(f"You've liked {liked_count} dishes")
+
+        # Look for preferred categories
+        cat_match = re.search(r'preferred categories.*?:\s*\n(.*?)(?:\n\n|$)', pref_text, re.IGNORECASE | re.DOTALL)
+        if cat_match:
+            cat_text = cat_match.group(1).strip()
+            # Extract first category
+            first_cat = re.search(r'-\s*([^:]+):', cat_text)
+            if first_cat:
+                pref_points.append(f"Favorite: {first_cat.group(1).strip()}")
+
+        # Look for like ratio
+        ratio_match = re.search(r'like rate:\s*(\d+)%', pref_text.lower())
+        if ratio_match:
+            ratio = int(ratio_match.group(1))
+            if ratio > 70:
+                pref_points.append("Generally positive about dining food")
+            elif ratio < 30:
+                pref_points.append("Selective eater - prioritizing top picks")
+
+    if not pref_points:
+        # Fallback: extract liked dishes/categories
         lines = pref_text.split('\n')
         for line in lines[:3]:
             if line.strip():
@@ -271,8 +358,41 @@ def get_agent_summaries(context: dict, meal: str = "") -> dict:
     return summaries
 
 
-def build_recommendation_prompt(context: dict, meal: str = "") -> str:
+def build_recommendation_prompt(context: dict, meal: str = "", question_context: Optional[dict] = None) -> str:
     """Build a comprehensive prompt with all agent context."""
+    qc = question_context or {}
+
+    # Build additional context from questions
+    extra_context = ""
+    if qc:
+        extra_lines = []
+        if qc.get("mood"):
+            extra_lines.append(f"- Current mood: {qc['mood']}")
+        if qc.get("craving"):
+            craving_desc = {
+                "comfort": "comfort food (warm, hearty dishes)",
+                "healthy": "something healthy (fresh, nutritious)",
+                "quick": "a quick bite (fast, convenient)",
+                "filling": "a big filling meal (substantial portions)",
+            }
+            extra_lines.append(f"- Craving: {craving_desc.get(qc['craving'], qc['craving'])}")
+        if qc.get("spice_level"):
+            spice_desc = {
+                "mild": "mild (no spice)",
+                "medium": "medium (some kick)",
+                "spicy": "spicy (bring the heat)",
+            }
+            extra_lines.append(f"- Spice preference: {spice_desc.get(qc['spice_level'], qc['spice_level'])}")
+        if qc.get("time_constraint"):
+            time_desc = {
+                "rush": "in a rush (need quick options)",
+                "normal": "normal mealtime",
+                "leisurely": "taking their time (can sit down)",
+            }
+            extra_lines.append(f"- Time available: {time_desc.get(qc['time_constraint'], qc['time_constraint'])}")
+
+        if extra_lines:
+            extra_context = "\n## User's Current Preferences (from questions)\n" + "\n".join(extra_lines)
 
     prompt = f"""You are BerkeleyBites AI, a personalized food recommendation assistant for UC Berkeley dining halls.
 
@@ -283,6 +403,7 @@ I've gathered the following information to help you make personalized recommenda
 
 ## User's Current Mood
 {context.get('mood', 'Unknown')}
+{extra_context}
 
 ## Current Weather
 {context.get('temperature', 'Unknown')}
@@ -296,13 +417,15 @@ I've gathered the following information to help you make personalized recommenda
 ## Your Task
 Based on ALL the information above, recommend 2-4 specific dishes that would be perfect for this user right now. Consider:
 1. Their mood and what foods suit that emotional state
-2. The weather and temperature-appropriate food choices
-3. Their past preferences and ratings history
-4. Their dietary restrictions (these are already filtered in the dish list)
+2. Their specific cravings and food preferences they just told you
+3. The weather and temperature-appropriate food choices
+4. Their past preferences and ratings history
+5. Their dietary restrictions (these are already filtered in the dish list)
+6. Their time constraints (if in a rush, prioritize quick options)
 
 For each recommendation:
 - Name the specific dish
-- Explain briefly why it's a good match (mood, weather, taste, or combination)
+- Explain briefly why it's a good match (mood, craving, weather, taste, or combination)
 - Mention where to find it (dining hall and meal)
 
 Be concise, friendly, and helpful. Use markdown formatting."""
@@ -313,7 +436,8 @@ Be concise, friendly, and helpful. Use markdown formatting."""
 def get_recommendation(
     query: str,
     meal: str = "",
-    session_id: str = "default"
+    session_id: str = "default",
+    question_context: Optional[dict] = None
 ) -> dict:
     """
     Get a food recommendation using the multi-agent system.
@@ -329,6 +453,8 @@ def get_recommendation(
         query: The user's request (e.g., "recommend lunch")
         meal: Optional meal period filter
         session_id: Session ID for conversation history
+        question_context: Optional context from user's question answers
+            (mood, craving, spice_level, time_constraint)
 
     Returns:
         Dictionary with agent_summaries and recommendation.
@@ -341,10 +467,10 @@ def get_recommendation(
         context = gather_agent_context(meal)
 
         # Extract summaries for UI display
-        summaries = get_agent_summaries(context, meal)
+        summaries = get_agent_summaries(context, meal, question_context)
 
-        # Build the comprehensive prompt
-        system_prompt = build_recommendation_prompt(context, meal)
+        # Build the comprehensive prompt with question context
+        system_prompt = build_recommendation_prompt(context, meal, question_context)
 
         # Build messages
         messages = [SystemMessage(content=system_prompt)]

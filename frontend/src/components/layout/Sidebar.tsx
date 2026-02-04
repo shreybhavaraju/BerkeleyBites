@@ -1,7 +1,6 @@
 import { ProfileSummary } from '../profile/ProfileSummary';
 import { ProfileEditor } from '../profile/ProfileEditor';
 import { FeedbackStats } from '../profile/FeedbackStats';
-import { MoodSelector } from '../profile/MoodSelector';
 
 export function Sidebar() {
   return (
@@ -20,13 +19,6 @@ export function Sidebar() {
             Your Feedback
           </h2>
           <FeedbackStats />
-        </section>
-
-        <section>
-          <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">
-            How are you feeling?
-          </h2>
-          <MoodSelector />
         </section>
       </div>
     </aside>
