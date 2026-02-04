@@ -7,7 +7,6 @@ import type {
   ChatResponse,
   RecommendationResponse,
   QuestionResponse,
-  Weather,
   MoodOption,
 } from '../types';
 
@@ -156,11 +155,6 @@ export function isChatResponse(
   response: ChatApiResponse
 ): response is ChatResponse {
   return 'response' in response && !('response_type' in response);
-}
-
-// Weather API
-export async function getWeather(): Promise<Weather> {
-  return fetchApi<Weather>('/weather');
 }
 
 // Health Check

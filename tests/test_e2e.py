@@ -19,6 +19,7 @@ from agents.orchestrator import (
     build_recommendation_prompt,
     gather_agent_context,
     clear_orchestrator_history,
+    print("HI")
 )
 
 
@@ -78,13 +79,11 @@ class TestEndToEnd:
         # Check all sections are present
         assert "User's Dietary Profile" in prompt
         assert "User's Current Mood" in prompt
-        assert "Current Weather" in prompt
         assert "User's Taste Preferences" in prompt
         assert "Available Dishes" in prompt
 
         # Check context content is included
         assert "HAPPY" in prompt
-        assert "Berkeley" in prompt
         assert "Lunch" in prompt
 
     def test_prompt_reflects_mood_changes(self, full_menu_df, user_feedback_df):
@@ -286,15 +285,13 @@ class TestContextGathering:
 
         context = gather_agent_context(meal="Dinner")
 
-        # All four agents should have contributed
+        # All three agents should have contributed
         assert "mood" in context
-        assert "temperature" in context
         assert "preferences" in context
         assert "dishes" in context
 
         # Each should have meaningful content
         assert len(context["mood"]) > 50
-        assert len(context["temperature"]) > 50
         assert len(context["dishes"]) > 50
 
     def test_context_respects_meal_filter(self, full_menu_df, user_feedback_df):

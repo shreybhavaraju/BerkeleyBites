@@ -27,6 +27,47 @@ def set_feedback_data(feedback_df: pd.DataFrame, user_id: str, menu_df: pd.DataF
     _menu_df = menu_df
 
 
+def _get_feedback_df() -> Optional[pd.DataFrame]:
+    """Get feedback DataFrame from memory or database."""
+    global _feedback_df
+
+    if _feedback_df is not None and not _feedback_df.empty:
+        return _feedback_df
+
+    # Try loading from database if not in memory
+    if _user_id:
+        try:
+            from backend.database import get_user_feedback
+            feedback = get_user_feedback(_user_id)
+            if feedback:
+                _feedback_df = pd.DataFrame(feedback)
+                return _feedback_df
+        except Exception as e:
+            print(f"Database feedback query failed: {e}")
+
+    return _feedback_df
+
+
+def _get_menu_df() -> Optional[pd.DataFrame]:
+    """Get menu DataFrame from memory or database."""
+    global _menu_df
+
+    if _menu_df is not None and not _menu_df.empty:
+        return _menu_df
+
+    # Try loading from database if not in memory
+    try:
+        from backend.database import get_dishes
+        dishes = get_dishes()
+        if dishes:
+            _menu_df = pd.DataFrame(dishes)
+            return _menu_df
+    except Exception as e:
+        print(f"Database menu query failed: {e}")
+
+    return _menu_df
+
+
 @tool
 def get_taste_preferences() -> str:
     """
@@ -40,10 +81,12 @@ def get_taste_preferences() -> str:
     Returns:
         A string describing the user's taste preferences based on their history.
     """
-    if _feedback_df is None or _feedback_df.empty or _user_id is None:
+    feedback_df = _get_feedback_df()
+
+    if feedback_df is None or feedback_df.empty or _user_id is None:
         return "No feedback history available. This appears to be a new user with no ratings yet."
 
-    user_feedback = _feedback_df[_feedback_df['user_id'] == _user_id].copy()
+    user_feedback = feedback_df[feedback_df['user_id'] == _user_id].copy()
 
     if len(user_feedback) < MIN_FEEDBACK_COUNT:
         count = len(user_feedback)
@@ -59,14 +102,15 @@ The user is still building their taste profile."""
     liked_categories = []
     disliked_categories = []
 
-    if _menu_df is not None and not _menu_df.empty:
+    menu_df = _get_menu_df()
+    if menu_df is not None and not menu_df.empty:
         for dish_name in liked:
-            match = _menu_df[_menu_df['dish_name'].str.lower() == dish_name.lower()]
+            match = menu_df[menu_df['dish_name'].str.lower() == dish_name.lower()]
             if not match.empty:
                 liked_categories.append(match.iloc[0]['category'])
 
         for dish_name in disliked:
-            match = _menu_df[_menu_df['dish_name'].str.lower() == dish_name.lower()]
+            match = menu_df[menu_df['dish_name'].str.lower() == dish_name.lower()]
             if not match.empty:
                 disliked_categories.append(match.iloc[0]['category'])
 
@@ -119,13 +163,16 @@ def get_similar_liked_dishes(dish_name: str = "") -> str:
     Returns:
         Suggestions for dishes the user might like based on their history.
     """
-    if _feedback_df is None or _feedback_df.empty or _user_id is None:
+    feedback_df = _get_feedback_df()
+    menu_df = _get_menu_df()
+
+    if feedback_df is None or feedback_df.empty or _user_id is None:
         return "No feedback history available to make personalized suggestions."
 
-    if _menu_df is None or _menu_df.empty:
+    if menu_df is None or menu_df.empty:
         return "No menu data available to find similar dishes."
 
-    user_feedback = _feedback_df[_feedback_df['user_id'] == _user_id].copy()
+    user_feedback = feedback_df[feedback_df['user_id'] == _user_id].copy()
     liked = user_feedback[user_feedback['liked'] == 1]['dish_name'].tolist()
 
     if not liked:
@@ -134,7 +181,7 @@ def get_similar_liked_dishes(dish_name: str = "") -> str:
     # Find categories of liked dishes
     liked_categories = []
     for liked_dish in liked:
-        match = _menu_df[_menu_df['dish_name'].str.lower() == liked_dish.lower()]
+        match = menu_df[menu_df['dish_name'].str.lower() == liked_dish.lower()]
         if not match.empty:
             liked_categories.append(match.iloc[0]['category'])
 
@@ -148,7 +195,7 @@ def get_similar_liked_dishes(dish_name: str = "") -> str:
 
     suggestions = []
     for category in top_categories:
-        cat_dishes = _menu_df[_menu_df['category'] == category]
+        cat_dishes = menu_df[menu_df['category'] == category]
         for _, dish in cat_dishes.iterrows():
             if dish['dish_name'].lower() not in rated_dishes:
                 suggestions.append({

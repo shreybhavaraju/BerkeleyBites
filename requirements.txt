@@ -11,11 +11,18 @@ beautifulsoup4>=4.11.0
 # Data Processing
 # ============================================
 pandas>=1.5.0
+numpy>=1.24.0
 
 # ============================================
 # Web Application
 # ============================================
 streamlit>=1.28.0
+
+# ============================================
+# FastAPI Backend
+# ============================================
+fastapi>=0.100.0
+uvicorn>=0.23.0
 
 # ============================================
 # LangChain + Perplexity
@@ -25,11 +32,19 @@ langchain-openai>=0.1.0
 langchain-core>=0.3.0
 
 # ============================================
+# Database (Supabase)
+# ============================================
+supabase>=2.0.0
+
+# ============================================
+# Embeddings (RAG System)
+# ============================================
+# sentence-transformers for local embeddings (free, no API costs)
+# Uses all-MiniLM-L6-v2 (384 dims) - fast inference, good quality
+sentence-transformers>=2.2.0
+torch>=2.0.0
+
+# ============================================
 # Environment & Utilities
 # ============================================
 python-dotenv>=1.0.0
-
-# ============================================
-# Multi-Agent System Dependencies
-# ============================================
-requests>=2.28.0

@@ -2,8 +2,10 @@
 BerkeleyBites FastAPI Backend
 
 Provides REST API endpoints for the React frontend, wrapping existing agents.
+Data is stored in Supabase (PostgreSQL).
 """
 
+import logging
 import os
 import sys
 from datetime import date, datetime
@@ -11,8 +13,17 @@ from typing import Optional
 from contextlib import asynccontextmanager
 
 import pandas as pd
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Add parent directory to path for agent imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,14 +32,13 @@ from .models import (
     UserProfile, MoodUpdate, Dish, MenuSummary,
     FeedbackSubmit, FeedbackStats,
     ChatMessage, ChatResponse, RecommendationResponse, AgentSummary,
-    WeatherResponse, QuestionResponse, QuestionOption
+    QuestionResponse, QuestionOption
 )
 
 # Import existing modules from parent directory
 from scraper import is_data_fresh, scrape_and_transform
 from food_agent import set_context, process_command
 from agents import set_orchestrator_context, get_recommendation
-from agents.temperature_agent import fetch_weather_from_open_meteo, get_temperature_guidance
 from agents.mood_agent import MOOD_GUIDANCE
 from agents.question_agent import (
     get_next_question,
@@ -36,32 +46,25 @@ from agents.question_agent import (
     format_context_for_recommendation
 )
 
+# Import database layer
+from . import database as db
+
 
 # ===========================================
 # Global State
 # ===========================================
 
-# In-memory user profiles (keyed by user_id)
-_user_profiles: dict[str, UserProfile] = {}
-_user_moods: dict[str, str] = {}
+# In-memory cache for menu data
 _menu_df: Optional[pd.DataFrame] = None
 
-# Pending recommendations (keyed by session_id)
+# Pending recommendations (in-memory, ephemeral by design)
 # Stores: {"meal": str, "answered": dict[str, str]}
 _pending_recommendations: dict[str, dict] = {}
 
 
-def get_base_path() -> str:
-    """Get the base path for data files."""
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
 def load_menu_data() -> pd.DataFrame:
-    """Load menu data, scraping if necessary."""
+    """Load menu data from Supabase, scraping if necessary."""
     global _menu_df
-
-    base_path = get_base_path()
-    csv_path = os.path.join(base_path, 'dining_data_clean.csv')
 
     if not is_data_fresh():
         # Need to scrape fresh data
@@ -69,40 +72,61 @@ def load_menu_data() -> pd.DataFrame:
         _menu_df = df
         return df
 
-    if _menu_df is None:
-        _menu_df = pd.read_csv(csv_path)
+    # Load from Supabase
+    dishes = db.get_dishes()
+    if dishes:
+        _menu_df = pd.DataFrame(dishes)
+        return _menu_df
 
-    return _menu_df
-
-
-def load_feedback() -> pd.DataFrame:
-    """Load existing feedback from CSV."""
-    base_path = get_base_path()
-    csv_path = os.path.join(base_path, 'feedback.csv')
-
-    try:
-        return pd.read_csv(csv_path)
-    except FileNotFoundError:
-        return pd.DataFrame(columns=['user_id', 'dish_id', 'dish_name', 'liked', 'timestamp', 'date'])
+    return pd.DataFrame()
 
 
-def save_feedback_to_csv(feedback_df: pd.DataFrame) -> None:
-    """Save feedback DataFrame to CSV."""
-    base_path = get_base_path()
-    csv_path = os.path.join(base_path, 'feedback.csv')
-    feedback_df.to_csv(csv_path, index=False)
+def load_feedback(user_id: Optional[str] = None) -> pd.DataFrame:
+    """Load existing feedback from Supabase."""
+    if user_id:
+        feedback = db.get_user_feedback(user_id)
+    else:
+        # Get all feedback (for agents that need full history)
+        client = db.get_client()
+        response = client.table("feedback").select("*").execute()
+        feedback = response.data
+
+    if feedback:
+        df = pd.DataFrame(feedback)
+        # Rename columns for compatibility
+        if 'rating_date' in df.columns:
+            df['date'] = df['rating_date']
+        return df
+
+    return pd.DataFrame(columns=['user_id', 'dish_id', 'dish_name', 'liked', 'created_at', 'date'])
+
+
+def save_feedback(user_id: str, dish_id: int, dish_name: str, liked: bool) -> None:
+    """Save feedback to Supabase."""
+    db.submit_feedback(user_id, dish_id, dish_name, liked)
 
 
 def get_user_profile(user_id: str) -> UserProfile:
-    """Get or create user profile."""
-    if user_id not in _user_profiles:
-        _user_profiles[user_id] = UserProfile()
-    return _user_profiles[user_id]
+    """Get or create user profile from Supabase."""
+    profile_data = db.get_user_profile(user_id)
+    if profile_data:
+        return UserProfile(**profile_data)
+    return UserProfile()
+
+
+def save_user_profile(user_id: str, profile: UserProfile) -> None:
+    """Save user profile to Supabase."""
+    db.upsert_user_profile(user_id, profile.model_dump())
 
 
 def get_user_mood(user_id: str) -> str:
-    """Get user mood, defaulting to happy."""
-    return _user_moods.get(user_id, "happy")
+    """Get user mood from Supabase, defaulting to happy."""
+    return db.get_user_mood(user_id)
+
+
+def save_user_mood(user_id: str, mood: str) -> None:
+    """Save user mood to Supabase."""
+    db.set_user_mood(user_id, mood)
 
 
 def filter_by_profile(df: pd.DataFrame, profile: UserProfile) -> pd.DataFrame:
@@ -185,7 +209,45 @@ async def lifespan(app: FastAPI):
     """Initialize data on startup."""
     # Load menu data on startup
     load_menu_data()
+
+    # Warm caches for faster recommendations
+    await warm_caches()
+
     yield
+
+
+async def warm_caches():
+    """Warm caches on startup for faster recommendations."""
+    from datetime import date as date_type
+
+    logging.info("Warming caches...")
+
+    try:
+        # Import cache functions
+        from agents.cache import (
+            set_cached_dishes,
+            set_cached_dish_embeddings
+        )
+
+        today = str(date_type.today())
+
+        # Cache today's dishes
+        dishes = db.get_dishes(scrape_date=today)
+        if dishes:
+            set_cached_dishes(dishes, today)
+            logging.info(f"Cached {len(dishes)} dishes")
+
+        # Cache embeddings
+        try:
+            embeddings = db.get_dish_embeddings(today)
+            if embeddings:
+                set_cached_dish_embeddings(embeddings, today)
+                logging.info(f"Cached {len(embeddings)} embeddings")
+        except Exception as e:
+            logging.warning(f"Could not cache embeddings: {e}")
+
+    except Exception as e:
+        logging.warning(f"Cache warmup failed: {e}")
 
 
 # ===========================================
@@ -274,20 +336,66 @@ async def get_menu_summary(
 
 
 @app.post("/api/menu/refresh")
-async def refresh_menu():
+async def refresh_menu(
+    generate_embeddings: bool = Query(False, description="Also generate embeddings")
+):
     """Trigger menu scraper to get fresh data."""
     global _menu_df
 
     try:
         df = scrape_and_transform()
         _menu_df = df
-        return {
+
+        result = {
             "success": True,
             "message": f"Scraped {len(df)} dishes",
-            "date": str(date.today())
+            "date": str(date.today()),
+            "embeddings_generated": 0
         }
+
+        # Generate embeddings if requested
+        if generate_embeddings:
+            try:
+                from scraper import generate_embeddings_for_new_dishes
+                count = generate_embeddings_for_new_dishes()
+                result["embeddings_generated"] = count
+                result["message"] += f", generated {count} embeddings"
+            except Exception as e:
+                result["embedding_error"] = str(e)
+
+        # Re-warm caches
+        await warm_caches()
+
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
+
+
+@app.post("/api/embeddings/generate")
+async def generate_embeddings():
+    """Generate embeddings for dishes without them."""
+    try:
+        from scraper import generate_embeddings_for_new_dishes
+        count = generate_embeddings_for_new_dishes()
+
+        # Update embedding cache
+        from agents.cache import set_cached_dish_embeddings
+        embeddings = db.get_dish_embeddings()
+        if embeddings:
+            set_cached_dish_embeddings(embeddings, str(date.today()))
+
+        return {
+            "success": True,
+            "embeddings_generated": count,
+            "total_embeddings": len(embeddings) if embeddings else 0
+        }
+    except ImportError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Embedding service unavailable: {str(e)}. Install sentence-transformers."
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate embeddings: {str(e)}")
 
 
 # ===========================================
@@ -308,7 +416,7 @@ async def update_profile(
     user_id: str = Query("default", description="User ID")
 ):
     """Update user dietary profile."""
-    _user_profiles[user_id] = profile
+    save_user_profile(user_id, profile)
     return profile
 
 
@@ -326,7 +434,7 @@ async def update_mood(
             detail=f"Invalid mood. Valid options: {list(MOOD_GUIDANCE.keys())}"
         )
 
-    _user_moods[user_id] = mood
+    save_user_mood(user_id, mood)
     guidance = MOOD_GUIDANCE[mood]
 
     return {
@@ -357,38 +465,12 @@ async def get_mood(
 # ===========================================
 
 @app.post("/api/feedback")
-async def submit_feedback(
+async def submit_feedback_endpoint(
     feedback: FeedbackSubmit,
     user_id: str = Query("default", description="User ID")
 ):
     """Submit dish rating feedback."""
-    feedback_df = load_feedback()
-
-    # Check for existing feedback today
-    today = str(date.today())
-    existing = feedback_df[
-        (feedback_df['user_id'] == user_id) &
-        (feedback_df['dish_id'] == feedback.dish_id) &
-        (feedback_df['date'] == today)
-    ]
-
-    if not existing.empty:
-        # Update existing feedback
-        feedback_df.loc[existing.index, 'liked'] = 1 if feedback.liked else 0
-        feedback_df.loc[existing.index, 'timestamp'] = datetime.now().isoformat()
-    else:
-        # Add new feedback
-        new_entry = {
-            'user_id': user_id,
-            'dish_id': feedback.dish_id,
-            'dish_name': feedback.dish_name,
-            'liked': 1 if feedback.liked else 0,
-            'timestamp': datetime.now().isoformat(),
-            'date': today
-        }
-        feedback_df = pd.concat([feedback_df, pd.DataFrame([new_entry])], ignore_index=True)
-
-    save_feedback_to_csv(feedback_df)
+    save_feedback(user_id, feedback.dish_id, feedback.dish_name, feedback.liked)
 
     return {
         "success": True,
@@ -398,64 +480,22 @@ async def submit_feedback(
 
 
 @app.get("/api/feedback/stats", response_model=FeedbackStats)
-async def get_feedback_stats(
+async def get_feedback_stats_endpoint(
     user_id: str = Query("default", description="User ID")
 ):
     """Get user feedback statistics."""
-    feedback_df = load_feedback()
-
-    if feedback_df.empty:
-        return FeedbackStats(
-            total_ratings=0,
-            liked_count=0,
-            disliked_count=0,
-            today_ratings=0
-        )
-
-    user_feedback = feedback_df[feedback_df['user_id'] == user_id]
-
-    if user_feedback.empty:
-        return FeedbackStats(
-            total_ratings=0,
-            liked_count=0,
-            disliked_count=0,
-            today_ratings=0
-        )
-
-    today = str(date.today())
-    today_feedback = user_feedback[user_feedback['date'] == today]
-    liked_count = int(user_feedback['liked'].sum())
-
-    return FeedbackStats(
-        total_ratings=len(user_feedback),
-        liked_count=liked_count,
-        disliked_count=len(user_feedback) - liked_count,
-        today_ratings=len(today_feedback)
-    )
+    stats = db.get_feedback_stats(user_id)
+    return FeedbackStats(**stats)
 
 
 @app.get("/api/feedback/{dish_id}")
-async def get_dish_feedback(
+async def get_dish_feedback_endpoint(
     dish_id: int,
     user_id: str = Query("default", description="User ID")
 ):
     """Get user's feedback for a specific dish today."""
-    feedback_df = load_feedback()
-
-    if feedback_df.empty:
-        return {"feedback": None}
-
-    today = str(date.today())
-    existing = feedback_df[
-        (feedback_df['user_id'] == user_id) &
-        (feedback_df['dish_id'] == dish_id) &
-        (feedback_df['date'] == today)
-    ]
-
-    if existing.empty:
-        return {"feedback": None}
-
-    return {"feedback": bool(existing.iloc[0]['liked'])}
+    liked = db.get_dish_feedback(user_id, dish_id)
+    return {"feedback": liked}
 
 
 # ===========================================
@@ -590,7 +630,7 @@ async def generate_recommendation(
 
     # Update the mood based on the answer (for orchestrator compatibility)
     if "mood" in question_context:
-        _user_moods[user_id] = question_context["mood"]
+        save_user_mood(user_id, question_context["mood"])
         # Re-update agent context with new mood
         update_agent_context(user_id)
 
@@ -619,25 +659,6 @@ async def generate_recommendation(
 
 
 # ===========================================
-# Weather Endpoint
-# ===========================================
-
-@app.get("/api/weather", response_model=WeatherResponse)
-async def get_weather():
-    """Get current Berkeley weather and food suggestions."""
-    weather = fetch_weather_from_open_meteo()
-    temp_f = weather["temperature_f"]
-    conditions = weather["conditions"]
-    guidance = get_temperature_guidance(temp_f)
-
-    return WeatherResponse(
-        temperature_f=temp_f,
-        conditions=conditions,
-        food_suggestion=guidance["food_suggestion"]
-    )
-
-
-# ===========================================
 # Health Check
 # ===========================================
 
@@ -645,12 +666,83 @@ async def get_weather():
 async def health_check():
     """Health check endpoint."""
     menu_df = load_menu_data()
-    return {
+
+    result = {
         "status": "healthy",
         "date": str(date.today()),
         "menu_loaded": not menu_df.empty,
-        "dish_count": len(menu_df)
+        "dish_count": len(menu_df),
+        "storage_backend": "supabase"
     }
+
+    # Add Supabase health
+    try:
+        db_health = db.health_check()
+        result["database"] = db_health
+    except Exception as e:
+        result["database"] = {"status": "error", "error": str(e)}
+
+    # Add cache stats
+    try:
+        from agents.cache import get_cache
+        cache = get_cache()
+        result["cache"] = cache.get_stats()
+    except Exception as e:
+        result["cache"] = {"status": "error", "error": str(e)}
+
+    # Add embedding stats
+    try:
+        embeddings = db.get_dish_embeddings()
+        result["embeddings"] = {
+            "count": len(embeddings) if embeddings else 0,
+            "coverage": f"{len(embeddings) / len(menu_df) * 100:.1f}%" if menu_df is not None and len(menu_df) > 0 and embeddings else "0%"
+        }
+    except Exception as e:
+        result["embeddings"] = {"status": "unavailable", "error": str(e)}
+
+    return result
+
+
+@app.get("/api/rag/stats")
+async def get_rag_stats(
+    user_id: str = Query("default", description="User ID")
+):
+    """Get RAG system statistics and performance metrics."""
+    try:
+        from agents.cache import get_cache
+        from agents.hybrid_retriever import get_retriever
+
+        cache = get_cache()
+        retriever = get_retriever()
+
+        # Get embedding coverage
+        today = str(date.today())
+        dishes = db.get_dishes(scrape_date=today)
+        embeddings = db.get_dish_embeddings(today)
+
+        embedding_coverage = 0
+        if dishes and embeddings:
+            embedding_coverage = len(embeddings) / len(dishes) * 100
+
+        return {
+            "status": "healthy",
+            "cache_stats": cache.get_stats(),
+            "dishes_today": len(dishes) if dishes else 0,
+            "embeddings_count": len(embeddings) if embeddings else 0,
+            "embedding_coverage_percent": round(embedding_coverage, 1),
+            "retriever_config": {
+                "vector_candidates": retriever.config.vector_candidates,
+                "top_k_for_llm": retriever.config.top_k_for_llm,
+                "final_selection": retriever.config.final_selection,
+                "use_llm": retriever.config.use_llm,
+                "use_cache": retriever.config.use_cache
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
 
 if __name__ == "__main__":

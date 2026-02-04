@@ -18,6 +18,26 @@ def set_menu_data(menu_df: pd.DataFrame) -> None:
     _menu_df = menu_df
 
 
+def _get_menu_df() -> Optional[pd.DataFrame]:
+    """Get menu DataFrame from memory or database."""
+    global _menu_df
+
+    if _menu_df is not None and not _menu_df.empty:
+        return _menu_df
+
+    # Try loading from database if not in memory
+    try:
+        from backend.database import get_dishes
+        dishes = get_dishes()
+        if dishes:
+            _menu_df = pd.DataFrame(dishes)
+            return _menu_df
+    except Exception as e:
+        print(f"Database query failed: {e}")
+
+    return _menu_df
+
+
 @tool
 def get_available_dishes(
     meal_period: str = "",
@@ -41,10 +61,12 @@ def get_available_dishes(
     Returns:
         A formatted string listing available dishes with their details.
     """
-    if _menu_df is None or _menu_df.empty:
+    menu_df = _get_menu_df()
+
+    if menu_df is None or menu_df.empty:
         return "No menu data available. The menu may not have been loaded yet."
 
-    df = _menu_df.copy()
+    df = menu_df.copy()
 
     # Apply filters
     if meal_period:
@@ -66,7 +88,22 @@ def get_available_dishes(
 
     # Format results
     total_count = len(df)
-    df = df.head(limit)
+
+    # Sample dishes from multiple dining halls for variety (instead of just taking first N)
+    if len(df) > limit:
+        # Group by dining hall and sample proportionally
+        sampled_dfs = []
+        halls = df['dining_hall'].unique()
+        per_hall = max(1, limit // len(halls))
+
+        for hall in halls:
+            hall_df = df[df['dining_hall'] == hall]
+            sample_size = min(len(hall_df), per_hall)
+            sampled_dfs.append(hall_df.sample(n=sample_size, random_state=42))
+
+        df = pd.concat(sampled_dfs).head(limit)
+    else:
+        df = df.head(limit)
 
     results = []
     results.append(f"Found {total_count} dishes{f' (showing first {limit})' if total_count > limit else ''}:\n")
@@ -100,10 +137,12 @@ def get_menu_summary() -> str:
     Returns:
         A formatted string with menu overview statistics.
     """
-    if _menu_df is None or _menu_df.empty:
+    menu_df = _get_menu_df()
+
+    if menu_df is None or menu_df.empty:
         return "No menu data available."
 
-    df = _menu_df
+    df = menu_df
 
     # Gather statistics
     total_dishes = len(df)

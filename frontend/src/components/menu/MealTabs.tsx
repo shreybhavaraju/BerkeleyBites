@@ -8,15 +8,15 @@ export function MealTabs() {
   }
 
   return (
-    <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
+    <div className="flex gap-1 bg-slate-warm rounded-lg p-1 overflow-x-auto">
       {menuSummary.meal_periods.map((meal) => (
         <button
           key={meal}
           onClick={() => setSelectedMeal(meal)}
-          className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
+          className={`px-4 py-2 text-sm font-semibold rounded-md transition-all whitespace-nowrap ${
             selectedMeal === meal
-              ? 'bg-white text-berkeley shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-berkeley text-white shadow-md'
+              : 'text-gray-600 hover:text-berkeley hover:bg-white/50'
           }`}
         >
           {meal}

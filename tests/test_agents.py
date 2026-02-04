@@ -12,12 +12,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents.mood_agent import get_user_mood, set_user_mood, MOOD_GUIDANCE
-from agents.temperature_agent import (
-    get_current_temperature,
-    get_temperature_guidance,
-    fetch_weather_from_open_meteo,
-    interpret_weather_code,
-)
 from agents.food_availability_agent import (
     get_available_dishes,
     get_menu_summary,
@@ -257,62 +251,6 @@ class TestMoodAgent:
 
 
 # ============================================
-# TEMPERATURE AGENT TESTS
-# ============================================
-
-class TestTemperatureAgent:
-    """Tests for the Temperature Agent."""
-
-    def test_temperature_guidance_cold(self):
-        """Test cold temperature guidance."""
-        guidance = get_temperature_guidance(45)
-
-        assert "cold" in guidance["description"].lower()
-        assert any("soup" in item.lower() or "warm" in item.lower()
-                   for item in guidance["prefer_types"])
-
-    def test_temperature_guidance_hot(self):
-        """Test hot temperature guidance."""
-        guidance = get_temperature_guidance(90)
-
-        assert "hot" in guidance["description"].lower()
-        assert any("salad" in item.lower() or "cold" in item.lower()
-                   for item in guidance["prefer_types"])
-
-    def test_temperature_guidance_moderate(self):
-        """Test moderate temperature guidance."""
-        guidance = get_temperature_guidance(70)
-
-        assert "pleasant" in guidance["description"].lower() or "warm" in guidance["description"].lower()
-
-    def test_weather_code_interpretation(self):
-        """Test weather code interpretation."""
-        assert interpret_weather_code(0) == "Clear sky"
-        assert interpret_weather_code(3) == "Overcast"
-        assert interpret_weather_code(61) == "Slight rain"
-        assert interpret_weather_code(999) == "Unknown conditions"
-
-    def test_fetch_weather_returns_dict(self):
-        """Test that weather fetch returns expected structure."""
-        result = fetch_weather_from_open_meteo()
-
-        assert isinstance(result, dict)
-        assert "temperature_f" in result
-        assert "conditions" in result
-        assert "source" in result
-        # Temperature should be reasonable
-        assert -50 < result["temperature_f"] < 150
-
-    def test_get_current_temperature_tool(self):
-        """Test the temperature tool returns formatted string."""
-        result = get_current_temperature.invoke({})
-
-        assert "Berkeley" in result
-        assert "°F" in result
-        assert "Food Guidance:" in result
-
-
-# ============================================
 # FOOD AVAILABILITY AGENT TESTS
 # ============================================
 
@@ -519,15 +457,11 @@ class TestOrchestrator:
         context = gather_agent_context(meal="Lunch")
 
         assert "mood" in context
-        assert "temperature" in context
         assert "preferences" in context
         assert "dishes" in context
 
         # Mood should reflect happy
         assert "HAPPY" in context["mood"]
-
-        # Temperature should have weather info
-        assert "Berkeley" in context["temperature"]
 
         # Dishes should be filtered for lunch
         assert "Vegan Buddha Bowl" in context["dishes"]
@@ -553,8 +487,8 @@ class TestIntegration:
         context = gather_agent_context(meal="")
 
         # All context should be gathered
-        assert len(context) == 4
-        assert all(key in context for key in ["mood", "temperature", "preferences", "dishes"])
+        assert len(context) == 3
+        assert all(key in context for key in ["mood", "preferences", "dishes"])
 
         # Mood should be tired
         assert "TIRED" in context["mood"]
