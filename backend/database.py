@@ -2,7 +2,6 @@
 BerkeleyBites Database Layer
 
 Provides Supabase (PostgreSQL) access for all data operations.
-Replaces CSV files and in-memory storage with persistent database.
 """
 
 import os
@@ -172,6 +171,9 @@ def is_menu_fresh() -> bool:
 def delete_old_dishes(days_to_keep: int = 7) -> int:
     """
     Delete dishes older than specified days.
+
+    Note: This function is available for scheduled maintenance or manual cleanup.
+    Not called automatically - run via cron job or admin endpoint if needed.
 
     Args:
         days_to_keep: Number of days of data to retain.

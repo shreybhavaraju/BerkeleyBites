@@ -287,18 +287,18 @@ def get_agent_summaries(context: dict, meal: str = "", question_context: Optiona
                 pref_points.append("Selective eater - prioritizing top picks")
 
     if not pref_points:
-        # Fallback: extract liked dishes/categories
-        lines = pref_text.split('\n')
-        for line in lines[:3]:
-            if line.strip():
-                pref_points.append(line.strip()[:60])
-    elif "no history" in pref_text.lower() or "no feedback" in pref_text.lower():
-        pref_points = ["No taste history yet", "Rate dishes to get personalized recommendations"]
-    else:
-        pref_points = [pref_text[:80] if pref_text else "Building your taste profile"]
-
-    if not pref_points:
-        pref_points = ["Analyzing your preferences", "Rate dishes to improve recommendations"]
+        # Check for specific conditions first
+        if "no history" in pref_text.lower() or "no feedback" in pref_text.lower():
+            pref_points = ["No taste history yet", "Rate dishes to get personalized recommendations"]
+        else:
+            # Fallback: extract liked dishes/categories from text
+            lines = pref_text.split('\n')
+            for line in lines[:3]:
+                if line.strip():
+                    pref_points.append(line.strip()[:60])
+            # If still empty, use default message
+            if not pref_points:
+                pref_points = ["Analyzing your preferences", "Rate dishes to improve recommendations"]
 
     summaries["preferences"] = {
         "icon": "📊",
