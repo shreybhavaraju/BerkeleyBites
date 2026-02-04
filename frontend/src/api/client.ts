@@ -6,6 +6,7 @@ import type {
   DishFeedback,
   ChatResponse,
   RecommendationResponse,
+  QuestionResponse,
   Weather,
   MoodOption,
 } from '../types';
@@ -122,10 +123,12 @@ export async function getDishFeedback(dishId: number): Promise<DishFeedback> {
 }
 
 // Chat API
+export type ChatApiResponse = ChatResponse | RecommendationResponse | QuestionResponse;
+
 export async function sendChatMessage(
   message: string
-): Promise<ChatResponse | RecommendationResponse> {
-  return fetchApi<ChatResponse | RecommendationResponse>(
+): Promise<ChatApiResponse> {
+  return fetchApi<ChatApiResponse>(
     `/chat?user_id=${getUserId()}`,
     {
       method: 'POST',
@@ -138,9 +141,21 @@ export async function sendChatMessage(
 }
 
 export function isRecommendationResponse(
-  response: ChatResponse | RecommendationResponse
+  response: ChatApiResponse
 ): response is RecommendationResponse {
   return 'agent_summaries' in response && 'recommendation' in response;
+}
+
+export function isQuestionResponse(
+  response: ChatApiResponse
+): response is QuestionResponse {
+  return 'response_type' in response && response.response_type === 'question';
+}
+
+export function isChatResponse(
+  response: ChatApiResponse
+): response is ChatResponse {
+  return 'response' in response && !('response_type' in response);
 }
 
 // Weather API

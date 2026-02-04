@@ -127,6 +127,22 @@ class ChatResponse(BaseModel):
     session_id: str
 
 
+class QuestionOption(BaseModel):
+    """A single option for a question."""
+    value: str
+    label: str
+    emoji: str = ""
+
+
+class QuestionResponse(BaseModel):
+    """Response that asks user a question with options."""
+    response_type: str = "question"
+    question_id: str
+    question_text: str
+    options: list[QuestionOption]
+    session_id: str
+
+
 class AgentSummary(BaseModel):
     """Summary from a single agent."""
     icon: str

@@ -85,12 +85,33 @@ export interface DishFeedback {
   feedback: boolean | null;
 }
 
+// Question Types
+export interface QuestionOption {
+  value: string;
+  label: string;
+  emoji?: string;
+}
+
+export interface QuestionResponse {
+  response_type: 'question';
+  question_id: string;
+  question_text: string;
+  options: QuestionOption[];
+  session_id: string;
+}
+
 // Chat Types
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   agentSummaries?: Record<string, AgentSummary>;
   isRecommendation?: boolean;
+  // Question-related fields
+  isQuestion?: boolean;
+  questionId?: string;
+  questionText?: string;
+  options?: QuestionOption[];
+  answeredValue?: string;
 }
 
 export interface ChatResponse {

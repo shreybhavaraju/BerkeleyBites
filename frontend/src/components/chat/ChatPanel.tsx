@@ -4,13 +4,17 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { AgentProgress } from './AgentProgress';
 import { RecommendationMessage } from './RecommendationMessage';
+import { QuestionMessage } from './QuestionMessage';
 
 export function ChatPanel() {
-  const { messages, sendMessage, isLoading, isRecommending, agentSteps } = useChat();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { messages, sendMessage, answerQuestion, isLoading, isRecommending, agentSteps } = useChat();
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Scroll within the chat container only, not the entire page
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   }, [messages, agentSteps]);
 
   return (
@@ -26,7 +30,7 @@ export function ChatPanel() {
       </div>
 
       {/* Messages area */}
-      <div className="h-80 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
+      <div ref={messagesContainerRef} className="h-80 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
         {messages.length === 0 && !isRecommending ? (
           <div className="text-center py-8">
             <div className="w-12 h-12 bg-berkeley/10 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -39,6 +43,7 @@ export function ChatPanel() {
           </div>
         ) : (
           messages.map((message, index) => {
+            // Render recommendation messages
             if (message.role === 'assistant' && message.isRecommendation && message.agentSummaries) {
               return (
                 <div key={index} className="flex justify-start">
@@ -51,6 +56,26 @@ export function ChatPanel() {
                 </div>
               );
             }
+
+            // Render question messages
+            if (message.role === 'assistant' && message.isQuestion && message.questionId && message.options) {
+              return (
+                <div key={index} className="flex justify-start">
+                  <div className="max-w-[85%]">
+                    <QuestionMessage
+                      questionId={message.questionId}
+                      questionText={message.questionText || message.content}
+                      options={message.options}
+                      onAnswer={answerQuestion}
+                      disabled={isLoading}
+                      answeredValue={message.answeredValue}
+                    />
+                  </div>
+                </div>
+              );
+            }
+
+            // Render regular chat messages
             return <ChatMessage key={index} message={message} />;
           })
         )}
@@ -83,7 +108,6 @@ export function ChatPanel() {
           </div>
         )}
 
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input area */}

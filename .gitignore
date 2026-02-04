@@ -30,3 +30,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Scripts runtime files
+scripts/.pids/
+scripts/logs/

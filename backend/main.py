@@ -21,7 +21,7 @@ from .models import (
     UserProfile, MoodUpdate, Dish, MenuSummary,
     FeedbackSubmit, FeedbackStats,
     ChatMessage, ChatResponse, RecommendationResponse, AgentSummary,
-    WeatherResponse
+    WeatherResponse, QuestionResponse, QuestionOption
 )
 
 # Import existing modules from parent directory
@@ -30,6 +30,11 @@ from food_agent import set_context, process_command
 from agents import set_orchestrator_context, get_recommendation
 from agents.temperature_agent import fetch_weather_from_open_meteo, get_temperature_guidance
 from agents.mood_agent import MOOD_GUIDANCE
+from agents.question_agent import (
+    get_next_question,
+    all_questions_answered,
+    format_context_for_recommendation
+)
 
 
 # ===========================================
@@ -40,6 +45,10 @@ from agents.mood_agent import MOOD_GUIDANCE
 _user_profiles: dict[str, UserProfile] = {}
 _user_moods: dict[str, str] = {}
 _menu_df: Optional[pd.DataFrame] = None
+
+# Pending recommendations (keyed by session_id)
+# Stores: {"meal": str, "answered": dict[str, str]}
+_pending_recommendations: dict[str, dict] = {}
 
 
 def get_base_path() -> str:
@@ -466,32 +475,147 @@ async def chat(
 
     command = message.message.strip()
 
-    # Route /recommend to orchestrator, others to food_agent
+    # Check if this is an answer to a pending question
+    if command.startswith("answer:"):
+        return await handle_question_answer(command, session_id, user_id)
+
+    # Route /recommend to start the questioning flow
     if command.lower().startswith("/recommend"):
         parts = command.split(maxsplit=1)
         meal = parts[1] if len(parts) > 1 else ""
-        result = get_recommendation(query=command, meal=meal, session_id=session_id)
 
-        # Convert dict summaries to AgentSummary models
-        agent_summaries = {}
-        for key, summary in result.get("agent_summaries", {}).items():
-            agent_summaries[key] = AgentSummary(
-                icon=summary["icon"],
-                title=summary["title"],
-                points=summary["points"]
+        # Initialize pending recommendation with empty answers
+        _pending_recommendations[session_id] = {
+            "meal": meal,
+            "answered": {}
+        }
+
+        # Get the first question
+        next_question = get_next_question({})
+        if next_question:
+            return QuestionResponse(
+                response_type="question",
+                question_id=next_question["id"],
+                question_text=next_question["question_text"],
+                options=[
+                    QuestionOption(
+                        value=opt["value"],
+                        label=opt["label"],
+                        emoji=opt.get("emoji", "")
+                    )
+                    for opt in next_question["options"]
+                ],
+                session_id=session_id
             )
 
-        return RecommendationResponse(
-            agent_summaries=agent_summaries,
-            recommendation=result["recommendation"],
-            session_id=session_id
-        )
-    else:
-        response = process_command(command, session_id=session_id)
+        # If no questions (shouldn't happen), proceed directly to recommendation
+        return await generate_recommendation(session_id, user_id, meal, {})
+
+    # Other commands go to food_agent
+    response = process_command(command, session_id=session_id)
+    return ChatResponse(
+        response=response,
+        session_id=session_id
+    )
+
+
+async def handle_question_answer(command: str, session_id: str, user_id: str):
+    """Handle an answer to a pending question."""
+    # Parse answer: format is "answer:question_id:value"
+    parts = command.split(":", 2)
+    if len(parts) != 3:
         return ChatResponse(
-            response=response,
+            response="Invalid answer format",
             session_id=session_id
         )
+
+    _, question_id, value = parts
+
+    # Get pending recommendation
+    pending = _pending_recommendations.get(session_id)
+    if not pending:
+        return ChatResponse(
+            response="No pending recommendation. Use /recommend to start.",
+            session_id=session_id
+        )
+
+    # Record the answer
+    pending["answered"][question_id] = value
+
+    # Check if all questions are answered
+    if all_questions_answered(pending["answered"]):
+        # Generate the recommendation
+        meal = pending["meal"]
+        answered = pending["answered"]
+
+        # Clear pending state
+        del _pending_recommendations[session_id]
+
+        return await generate_recommendation(session_id, user_id, meal, answered)
+
+    # Get the next question
+    next_question = get_next_question(pending["answered"])
+    if next_question:
+        return QuestionResponse(
+            response_type="question",
+            question_id=next_question["id"],
+            question_text=next_question["question_text"],
+            options=[
+                QuestionOption(
+                    value=opt["value"],
+                    label=opt["label"],
+                    emoji=opt.get("emoji", "")
+                )
+                for opt in next_question["options"]
+            ],
+            session_id=session_id
+        )
+
+    # Fallback: generate recommendation if no more questions
+    meal = pending["meal"]
+    answered = pending["answered"]
+    del _pending_recommendations[session_id]
+    return await generate_recommendation(session_id, user_id, meal, answered)
+
+
+async def generate_recommendation(
+    session_id: str,
+    user_id: str,
+    meal: str,
+    answered: dict
+):
+    """Generate a recommendation using the multi-agent system."""
+    # Get context from answers
+    question_context = format_context_for_recommendation(answered)
+
+    # Update the mood based on the answer (for orchestrator compatibility)
+    if "mood" in question_context:
+        _user_moods[user_id] = question_context["mood"]
+        # Re-update agent context with new mood
+        update_agent_context(user_id)
+
+    # Get recommendation with additional context
+    result = get_recommendation(
+        query=f"/recommend {meal}",
+        meal=meal,
+        session_id=session_id,
+        question_context=question_context
+    )
+
+    # Convert dict summaries to AgentSummary models
+    agent_summaries = {}
+    for key, summary in result.get("agent_summaries", {}).items():
+        agent_summaries[key] = AgentSummary(
+            icon=summary["icon"],
+            title=summary["title"],
+            points=summary["points"]
+        )
+
+    return RecommendationResponse(
+        agent_summaries=agent_summaries,
+        recommendation=result["recommendation"],
+        session_id=session_id
+    )
 
 
 # ===========================================
