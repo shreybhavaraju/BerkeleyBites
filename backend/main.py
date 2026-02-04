@@ -33,7 +33,6 @@ from .models import (
 
 # Import from sibling modules
 from scraper import is_data_fresh, scrape_and_transform
-from .food_agent import set_context, process_command
 from .agents import set_orchestrator_context, get_recommendation
 from .agents.mood_agent import MOOD_GUIDANCE
 from .agents.question_agent import (
@@ -175,14 +174,6 @@ def update_agent_context(user_id: str) -> pd.DataFrame:
 
     # Filter menu by profile
     filtered_df = filter_by_profile(menu_df, profile)
-
-    # Update food_agent context (handles free-form chat commands)
-    set_context(
-        menu_df=filtered_df,
-        feedback_df=feedback_df,
-        user_profile=profile.model_dump(),
-        user_id=user_id
-    )
 
     # Update orchestrator context (handles /recommend with multi-agent system)
     set_orchestrator_context(
@@ -547,10 +538,9 @@ async def chat(
         # If no questions (shouldn't happen), proceed directly to recommendation
         return await generate_recommendation(session_id, user_id, meal, {})
 
-    # Other commands go to food_agent
-    response = process_command(command, session_id=session_id)
+    # For unrecognized commands, return a helpful message
     return ChatResponse(
-        response=response,
+        response="Please use `/recommend [meal]` to get personalized recommendations. Example: `/recommend lunch`",
         session_id=session_id
     )
 
