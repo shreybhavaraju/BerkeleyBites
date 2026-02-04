@@ -144,7 +144,7 @@ def sample_feedback_df():
             "dish_id": "dish_001",
             "dish_name": "Vegan Buddha Bowl",
             "liked": 1,
-            "timestamp": datetime.now().isoformat(),
+            "created_at": datetime.now().isoformat(),
             "date": str(date.today()),
         },
         {
@@ -152,7 +152,7 @@ def sample_feedback_df():
             "dish_id": "dish_003",
             "dish_name": "Tomato Soup",
             "liked": 1,
-            "timestamp": datetime.now().isoformat(),
+            "created_at": datetime.now().isoformat(),
             "date": str(date.today()),
         },
         {
@@ -160,7 +160,7 @@ def sample_feedback_df():
             "dish_id": "dish_004",
             "dish_name": "Pepperoni Pizza",
             "liked": 0,
-            "timestamp": datetime.now().isoformat(),
+            "created_at": datetime.now().isoformat(),
             "date": str(date.today()),
         },
         {
@@ -168,7 +168,7 @@ def sample_feedback_df():
             "dish_id": "dish_002",
             "dish_name": "Grilled Chicken Sandwich",
             "liked": 1,
-            "timestamp": datetime.now().isoformat(),
+            "created_at": datetime.now().isoformat(),
             "date": str(date.today()),
         },
     ])
@@ -361,7 +361,7 @@ class TestTastePreferencesAgent:
                 "dish_id": "dish_001",
                 "dish_name": "Test Dish",
                 "liked": 1,
-                "timestamp": datetime.now().isoformat(),
+                "created_at": datetime.now().isoformat(),
                 "date": str(date.today()),
             },
             {
@@ -369,7 +369,7 @@ class TestTastePreferencesAgent:
                 "dish_id": "dish_002",
                 "dish_name": "Another Dish",
                 "liked": 0,
-                "timestamp": datetime.now().isoformat(),
+                "created_at": datetime.now().isoformat(),
                 "date": str(date.today()),
             },
         ])

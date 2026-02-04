@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.chat_history import InMemoryChatMessageHistory
 
 # ============================================
@@ -128,7 +128,7 @@ def get_feedback_history_str(limit: int = 10) -> str:
     if user_feedback.empty or len(user_feedback) < MIN_FEEDBACK_FOR_RAG:
         return "Not enough feedback history"
 
-    user_feedback = user_feedback.sort_values('timestamp', ascending=False).head(limit)
+    user_feedback = user_feedback.sort_values('created_at', ascending=False).head(limit)
 
     liked = user_feedback[user_feedback['liked'] == 1]['dish_name'].tolist()
     disliked = user_feedback[user_feedback['liked'] == 0]['dish_name'].tolist()

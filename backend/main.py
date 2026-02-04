@@ -7,8 +7,7 @@ Data is stored in Supabase (PostgreSQL).
 
 import logging
 import os
-import sys
-from datetime import date, datetime
+from datetime import date
 from typing import Optional
 from contextlib import asynccontextmanager
 
