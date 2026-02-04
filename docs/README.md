@@ -1,244 +1,169 @@
 # BerkeleyBites Documentation
 
-## What is This Project?
+## For Your Interview Tomorrow
 
-**BerkeleyBites** is a web application that helps UC Berkeley students decide what to eat at campus dining halls. Instead of scrolling through menus, users answer a few questions and get personalized food recommendations based on:
+**Start here:** [Interview Prep Guide](./interview-prep.md)
 
-- Their dietary restrictions (vegan, vegetarian, allergies, etc.)
-- Their current mood (happy, stressed, tired)
-- What kind of food they're craving
-- Foods they've liked or disliked before
-
----
-
-## Understanding Full-Stack Development (For Beginners)
-
-### What is "Full-Stack"?
-
-A "full-stack" application has two main parts:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    FRONTEND                                  │
-│                                                              │
-│   What users see and interact with in their browser         │
-│   (buttons, forms, text, images)                            │
-│                                                              │
-│   Technologies: React, HTML, CSS, JavaScript                │
-└─────────────────────────────────────────────────────────────┘
-                           ↕
-               (They communicate via "APIs")
-                           ↕
-┌─────────────────────────────────────────────────────────────┐
-│                    BACKEND                                   │
-│                                                              │
-│   The "brain" - processes requests, talks to databases,     │
-│   runs AI models, handles business logic                    │
-│                                                              │
-│   Technologies: Python, FastAPI, databases                  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Key Terms You'll See
-
-| Term | Simple Explanation |
-|------|-------------------|
-| **API** | A way for programs to talk to each other. Like a waiter taking orders between customers (frontend) and the kitchen (backend) |
-| **Endpoint** | A specific URL that does something. `/api/menu` gets the menu, `/api/profile` gets user settings |
-| **Database** | Where data is stored permanently (like a filing cabinet) |
-| **Component** | A reusable piece of UI (like a "DishCard" that shows one food item) |
-| **State** | Data that can change (like "is the menu loading?" or "what's the user's mood?") |
-| **REST API** | A common way to design APIs using HTTP methods (GET = read, POST = create, PUT = update) |
+This single document contains EVERYTHING you need:
+- Part 1: Absolute basics (what is a web app, frontend, backend, API, database)
+- Part 2: Technologies explained (React, TypeScript, Python, FastAPI, Supabase)
+- Part 3: How BerkeleyBites works (step-by-step with diagrams)
+- Part 4: Every possible interview question with answers
+- Part 5: Quick reference cheat sheet
 
 ---
 
-## Documentation Index
+## What is BerkeleyBites?
 
-| Document | What You'll Learn |
-|----------|-------------------|
-| [Glossary](./glossary.md) | **START HERE** - All technical terms explained simply |
-| [Architecture](./architecture.md) | How all the pieces connect together |
-| [Frontend](./frontend.md) | The user interface (React, what users see) |
-| [Backend](./backend.md) | The server (FastAPI, Python, business logic) |
-| [Agents](./agents.md) | The AI system that makes recommendations |
-| [Database](./database.md) | How data is stored and retrieved |
-| [API Reference](./api-reference.md) | Every endpoint and what it does |
-| [Data Flow](./data-flow.md) | Visual diagrams of how data moves |
-| [Interview Prep](./interview-prep.md) | Questions you might be asked |
-
----
-
-## The Big Picture
-
-Here's how BerkeleyBites works at the highest level:
+A web app that helps UC Berkeley students decide what to eat. Instead of scrolling through menus, users answer 4 questions and get personalized food recommendations.
 
 ```
-USER                         BROWSER                      SERVER                    DATABASE
-  │                             │                            │                          │
-  │  Opens berkeleybites.com    │                            │                          │
-  │ ──────────────────────────► │                            │                          │
-  │                             │                            │                          │
-  │                             │  "Give me today's menu"    │                          │
-  │                             │ ─────────────────────────► │                          │
-  │                             │                            │                          │
-  │                             │                            │  "Get dishes for today"  │
-  │                             │                            │ ───────────────────────► │
-  │                             │                            │                          │
-  │                             │                            │  ◄─── [dish1, dish2...]  │
-  │                             │                            │                          │
-  │                             │ ◄─── [formatted dishes]    │                          │
-  │                             │                            │                          │
-  │  ◄─── Sees menu on screen   │                            │                          │
-  │                             │                            │                          │
-  │  Clicks "Get Recommendation"│                            │                          │
-  │ ──────────────────────────► │                            │                          │
-  │                             │                            │                          │
-  │                             │  "Run AI recommendation"   │                          │
-  │                             │ ─────────────────────────► │                          │
-  │                             │                            │                          │
-  │                             │                            │   [AI Agents Process]    │
-  │                             │                            │   - Check mood           │
-  │                             │                            │   - Check cravings       │
-  │                             │                            │   - Check past likes     │
-  │                             │                            │   - Score all dishes     │
-  │                             │                            │   - Pick best matches    │
-  │                             │                            │                          │
-  │                             │ ◄─── "Try the Teriyaki     │                          │
-  │                             │       Chicken Bowl!"       │                          │
-  │                             │                            │                          │
-  │  ◄─── Sees recommendation   │                            │                          │
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         HOW IT WORKS                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+   USER                          APP                           AI SYSTEM
+     │                            │                                │
+     │  "I'm happy, want          │                                │
+     │   healthy food"            │                                │
+     │ ──────────────────────────►│                                │
+     │                            │  Asks 4 questions              │
+     │                            │  (mood, craving, spice, time)  │
+     │                            │                                │
+     │                            │  Collects answers              │
+     │                            │ ──────────────────────────────►│
+     │                            │                                │
+     │                            │                                │ Mood Agent
+     │                            │                                │ Taste Agent
+     │                            │                                │ Food Agent
+     │                            │                                │ Scoring
+     │                            │                                │ LLM
+     │                            │                                │
+     │                            │◄───────────────────────────────│
+     │                            │  "Try the Teriyaki Chicken     │
+     │◄───────────────────────────│   Bowl!"                       │
+     │                            │                                │
+     │  Sees recommendation!      │                                │
+     │                            │                                │
 ```
 
 ---
 
-## Project Structure (What's in Each Folder)
+## Tech Stack (Quick Reference)
+
+| What | Technology | Why |
+|------|------------|-----|
+| Frontend | React + TypeScript | Interactive UI, type safety |
+| Styling | Tailwind CSS | Fast, utility-based |
+| Backend | Python + FastAPI | Fast, AI-friendly |
+| Database | Supabase (PostgreSQL) | Managed, powerful |
+| AI | Perplexity LLM | Cost-effective recommendations |
+| Embeddings | all-MiniLM-L6-v2 | Semantic search |
+
+---
+
+## Project Structure
 
 ```
 BerkeleyBites/
+├── frontend/          # React app (what users see)
+│   └── src/
+│       ├── components/  # UI pieces (ChatPanel, DishCard, etc.)
+│       ├── api/         # Talks to backend
+│       └── context/     # Shared state
 │
-├── frontend/                 # What users see (React app)
-│   ├── src/
-│   │   ├── App.tsx          # Main application file
-│   │   ├── components/      # Reusable UI pieces
-│   │   ├── api/             # Code that talks to backend
-│   │   └── context/         # Shared application state
-│   └── package.json         # Frontend dependencies
+├── backend/           # FastAPI server (processes requests)
+│   ├── main.py        # API endpoints
+│   └── database.py    # Database operations
 │
-├── backend/                  # The server (FastAPI)
-│   ├── main.py              # All API endpoints
-│   ├── models.py            # Data structure definitions
-│   └── database.py          # Database connection code
+├── agents/            # AI recommendation system
+│   ├── orchestrator.py      # Coordinates everything
+│   ├── mood_agent.py        # Maps mood to food guidance
+│   ├── question_agent.py    # Handles the 4 questions
+│   ├── taste_preferences_agent.py  # Analyzes past likes
+│   ├── food_availability_agent.py  # Gets available dishes
+│   ├── hybrid_retriever.py  # 4-stage ranking pipeline
+│   └── scoring.py           # Multi-factor scoring
 │
-├── agents/                   # AI recommendation system
-│   ├── orchestrator.py      # Coordinates all agents
-│   ├── mood_agent.py        # Mood-based suggestions
-│   ├── question_agent.py    # Manages question flow
-│   ├── hybrid_retriever.py  # Smart dish selection
-│   ├── scoring.py           # How dishes are ranked
-│   ├── embedding_service.py # Semantic understanding
-│   └── cache.py             # Speed optimization
-│
-├── supabase/                 # Database configuration
-│   └── migrations/          # Database structure changes
-│
-├── scraper.py               # Gets menu from UC Berkeley website
-├── requirements.txt         # Python packages needed
-└── docs/                    # This documentation
+├── scraper.py         # Gets menu from Berkeley website
+└── docs/              # You are here!
 ```
 
 ---
 
-## Quick Start (Running the App)
+## The AI System (Key Differentiator)
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- A Perplexity API key (for AI recommendations)
+What makes this project interesting is the **multi-agent architecture**:
 
-### Step 1: Install Dependencies
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   Instead of ONE big AI prompt, we use SPECIALIZED AGENTS:              │
+│                                                                         │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                 │
+│   │ Mood Agent   │  │ Taste Agent  │  │ Food Agent   │                 │
+│   │              │  │              │  │              │                 │
+│   │ "Happy =     │  │ "User likes  │  │ "15 dishes   │                 │
+│   │  adventurous │  │  Asian food" │  │  available"  │                 │
+│   │  foods OK"   │  │              │  │              │                 │
+│   └──────────────┘  └──────────────┘  └──────────────┘                 │
+│          │                 │                 │                          │
+│          └─────────────────┴─────────────────┘                          │
+│                            │                                            │
+│                            ▼                                            │
+│                   ┌──────────────────┐                                  │
+│                   │ Hybrid Retriever │                                  │
+│                   │                  │                                  │
+│                   │ 1. SQL filters   │                                  │
+│                   │ 2. Vector search │                                  │
+│                   │ 3. Scoring       │                                  │
+│                   │ 4. LLM writes    │                                  │
+│                   └──────────────────┘                                  │
+│                            │                                            │
+│                            ▼                                            │
+│                   "I recommend the Teriyaki Chicken Bowl!"              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Other Documentation
+
+| Document | What It Covers |
+|----------|----------------|
+| [Interview Prep](./interview-prep.md) | **START HERE** - Complete guide with Q&A |
+| [Glossary](./glossary.md) | All technical terms defined |
+| [Architecture](./architecture.md) | System design details |
+| [Backend](./backend.md) | API and server details |
+| [Database](./database.md) | Tables and queries |
+| [Agents](./agents.md) | AI system deep dive |
+| [API Reference](./api-reference.md) | All endpoints |
+| [Data Flow](./data-flow.md) | How data moves through the system |
+
+---
+
+## Running Locally
 
 ```bash
-# Backend (Python packages)
+# 1. Install dependencies
 pip install -r requirements.txt
+cd frontend && npm install
 
-# Frontend (JavaScript packages)
-cd frontend
-npm install
-```
-
-### Step 2: Set Up Environment Variables
-
-```bash
-# Copy the example file
+# 2. Set up environment
 cp .env.example .env
+# Edit .env with your API keys
 
-# Edit .env and add your keys:
-# PERPLEXITY_API_KEY=your_key_here
-# SUPABASE_URL=your_supabase_url
-# SUPABASE_KEY=your_supabase_key
+# 3. Start the app
+# Terminal 1:
+uvicorn backend.main:app --reload --port 8000
+
+# Terminal 2:
+cd frontend && npm run dev
+
+# 4. Open http://localhost:5173
 ```
-
-### Step 3: Start the Application
-
-```bash
-# Terminal 1: Start backend
-cd backend
-uvicorn main:app --reload --port 8000
-
-# Terminal 2: Start frontend
-cd frontend
-npm run dev
-```
-
-### Step 4: Open in Browser
-
-Go to `http://localhost:5173`
 
 ---
 
-## Why This Architecture?
-
-### Why separate Frontend and Backend?
-
-1. **Specialization**: Different tools for different jobs
-   - React is great for building UIs
-   - Python is great for AI/ML and data processing
-
-2. **Scalability**: Can upgrade one without breaking the other
-
-3. **Team collaboration**: Frontend and backend developers can work independently
-
-### Why use AI Agents?
-
-Instead of one big AI prompt, we use specialized "agents":
-
-| Agent | Job | Why Separate? |
-|-------|-----|---------------|
-| Mood Agent | Understand emotions → food | Simple mapping, no AI needed |
-| Question Agent | Gather user preferences | Manages conversation flow |
-| Food Agent | Query available dishes | Database operation |
-| Taste Agent | Analyze past preferences | Data analysis |
-
-**Benefits**:
-- Each agent is simple and testable
-- If one fails, others still work
-- Easy to add new agents
-
-### Why use a Database?
-
-Without a database, data disappears when the server restarts. The database:
-- Stores menu items (updated daily)
-- Remembers user preferences
-- Tracks what users liked/disliked
-- Enables learning from feedback
-
----
-
-## Next Steps
-
-1. **Start with [Glossary](./glossary.md)** - Learn the terms
-2. **Read [Architecture](./architecture.md)** - Understand the big picture
-3. **Explore [Agents](./agents.md)** - The most interesting part
-4. **Review [Interview Prep](./interview-prep.md)** - Practice explaining it
-
-Good luck with your interview!
+**Good luck with your interview! Read the [Interview Prep Guide](./interview-prep.md) first!**
