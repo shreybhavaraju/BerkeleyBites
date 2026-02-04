@@ -23,7 +23,6 @@ class UserProfile(BaseModel):
     avoid_gluten: bool = False
     avoid_nuts: bool = False
     avoid_soy: bool = False
-    prefer_low_carbon: bool = False
 
 
 class MoodUpdate(BaseModel):
@@ -73,15 +72,6 @@ class MenuSummary(BaseModel):
     halal_count: int
 
 
-class MenuQuery(BaseModel):
-    """Query parameters for filtering menu."""
-    hall: Optional[str] = None
-    meal: Optional[str] = None
-    category: Optional[str] = None
-    vegetarian_only: bool = False
-    vegan_only: bool = False
-
-
 # ===========================================
 # Feedback Models
 # ===========================================
@@ -99,16 +89,6 @@ class FeedbackStats(BaseModel):
     liked_count: int
     disliked_count: int
     today_ratings: int
-
-
-class FeedbackEntry(BaseModel):
-    """A single feedback entry."""
-    user_id: str
-    dish_id: int
-    dish_name: str
-    liked: int
-    timestamp: str
-    date: str
 
 
 # ===========================================

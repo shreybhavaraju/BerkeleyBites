@@ -205,7 +205,7 @@ def generate_embeddings_for_new_dishes(batch_size: int = 50) -> int:
     """
     try:
         from backend.database import get_dishes_without_embeddings, batch_update_embeddings
-        from agents.embedding_service import generate_batch_embeddings
+        from backend.agents.embedding_service import generate_batch_embeddings
     except ImportError as e:
         print(f"Cannot generate embeddings - missing dependencies: {e}")
         return 0

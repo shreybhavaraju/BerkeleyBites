@@ -11,18 +11,18 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agents.mood_agent import get_user_mood, set_user_mood, MOOD_GUIDANCE
-from agents.food_availability_agent import (
+from backend.agents.mood_agent import get_user_mood, set_user_mood, MOOD_GUIDANCE
+from backend.agents.food_availability_agent import (
     get_available_dishes,
     get_menu_summary,
     set_menu_data,
 )
-from agents.taste_preferences_agent import (
+from backend.agents.taste_preferences_agent import (
     get_taste_preferences,
     get_similar_liked_dishes,
     set_feedback_data,
 )
-from agents.orchestrator import (
+from backend.agents.orchestrator import (
     set_orchestrator_context,
     get_user_profile_str,
     gather_agent_context,

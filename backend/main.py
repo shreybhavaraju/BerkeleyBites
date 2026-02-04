@@ -25,9 +25,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Add parent directory to path for agent imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from .models import (
     UserProfile, MoodUpdate, Dish, MenuSummary,
     FeedbackSubmit, FeedbackStats,
@@ -35,12 +32,12 @@ from .models import (
     QuestionResponse, QuestionOption
 )
 
-# Import existing modules from parent directory
+# Import from sibling modules
 from scraper import is_data_fresh, scrape_and_transform
-from food_agent import set_context, process_command
-from agents import set_orchestrator_context, get_recommendation
-from agents.mood_agent import MOOD_GUIDANCE
-from agents.question_agent import (
+from .food_agent import set_context, process_command
+from .agents import set_orchestrator_context, get_recommendation
+from .agents.mood_agent import MOOD_GUIDANCE
+from .agents.question_agent import (
     get_next_question,
     all_questions_answered,
     format_context_for_recommendation
@@ -224,7 +221,7 @@ async def warm_caches():
 
     try:
         # Import cache functions
-        from agents.cache import (
+        from .agents.cache import (
             set_cached_dishes,
             set_cached_dish_embeddings
         )
@@ -379,7 +376,7 @@ async def generate_embeddings():
         count = generate_embeddings_for_new_dishes()
 
         # Update embedding cache
-        from agents.cache import set_cached_dish_embeddings
+        from .agents.cache import set_cached_dish_embeddings
         embeddings = db.get_dish_embeddings()
         if embeddings:
             set_cached_dish_embeddings(embeddings, str(date.today()))
@@ -684,7 +681,7 @@ async def health_check():
 
     # Add cache stats
     try:
-        from agents.cache import get_cache
+        from .agents.cache import get_cache
         cache = get_cache()
         result["cache"] = cache.get_stats()
     except Exception as e:
@@ -709,8 +706,8 @@ async def get_rag_stats(
 ):
     """Get RAG system statistics and performance metrics."""
     try:
-        from agents.cache import get_cache
-        from agents.hybrid_retriever import get_retriever
+        from .agents.cache import get_cache
+        from .agents.hybrid_retriever import get_retriever
 
         cache = get_cache()
         retriever = get_retriever()

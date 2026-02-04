@@ -10,7 +10,6 @@ export interface UserProfile {
   avoid_gluten: boolean;
   avoid_nuts: boolean;
   avoid_soy: boolean;
-  prefer_low_carbon: boolean;
 }
 
 export const DEFAULT_PROFILE: UserProfile = {
@@ -24,7 +23,6 @@ export const DEFAULT_PROFILE: UserProfile = {
   avoid_gluten: false,
   avoid_nuts: false,
   avoid_soy: false,
-  prefer_low_carbon: false,
 };
 
 // Mood Types
