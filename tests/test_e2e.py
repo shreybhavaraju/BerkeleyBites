@@ -13,13 +13,12 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agents.orchestrator import (
+from backend.agents.orchestrator import (
     set_orchestrator_context,
     get_recommendation,
     build_recommendation_prompt,
     gather_agent_context,
     clear_orchestrator_history,
-    print("HI")
 )
 
 
@@ -140,7 +139,7 @@ class TestEndToEnd:
         assert "gluten" in prompt
         assert "nuts" in prompt
 
-    @patch('agents.orchestrator.get_llm')
+    @patch('backend.agents.orchestrator.get_llm')
     def test_get_recommendation_calls_llm(self, mock_get_llm, full_menu_df, user_feedback_df):
         """Test that get_recommendation properly calls the LLM."""
         # Setup mock
@@ -176,7 +175,7 @@ class TestEndToEnd:
         assert "Mediterranean Salad" in result
         assert "Chicken Teriyaki Bowl" in result
 
-    @patch('agents.orchestrator.get_llm')
+    @patch('backend.agents.orchestrator.get_llm')
     def test_recommendation_with_different_meals(self, mock_get_llm, full_menu_df, user_feedback_df):
         """Test recommendations for different meal periods."""
         mock_llm = MagicMock()
@@ -211,7 +210,7 @@ class TestEndToEnd:
         # Should include breakfast-specific context
         assert "Breakfast" in system_message
 
-    @patch('agents.orchestrator.get_llm')
+    @patch('backend.agents.orchestrator.get_llm')
     def test_error_handling(self, mock_get_llm, full_menu_df, user_feedback_df):
         """Test that errors are handled gracefully."""
         mock_llm = MagicMock()
@@ -239,7 +238,7 @@ class TestEndToEnd:
         # Should return error message, not crash
         assert "Error" in result or "error" in result
 
-    @patch('agents.orchestrator.get_llm')
+    @patch('backend.agents.orchestrator.get_llm')
     def test_rate_limit_handling(self, mock_get_llm, full_menu_df, user_feedback_df):
         """Test that rate limit errors are handled specially."""
         mock_llm = MagicMock()

@@ -1056,23 +1056,30 @@ Print this page and review before your interview!
 BerkeleyBites/
 ├── frontend/src/
 │   ├── App.tsx              # Main app
-│   ├── components/          # React components
+│   ├── components/          # React components (chat/, layout/, menu/, profile/)
+│   ├── hooks/               # Custom React hooks
 │   ├── api/client.ts        # API calls
+│   ├── types/               # TypeScript interfaces
 │   └── context/             # State management
 ├── backend/
-│   ├── main.py              # API endpoints
-│   ├── models.py            # Data models
-│   └── database.py          # DB operations
-├── agents/
-│   ├── orchestrator.py      # Coordinates agents
-│   ├── mood_agent.py        # Mood → food mapping
-│   ├── question_agent.py    # Preference questions
-│   ├── taste_preferences_agent.py  # Feedback analysis
-│   ├── food_availability_agent.py  # Available dishes
-│   ├── hybrid_retriever.py  # 4-stage pipeline
-│   ├── scoring.py           # Scoring algorithm
-│   └── embedding_service.py # Vector embeddings
-└── scraper.py               # Menu scraping
+│   ├── main.py              # FastAPI endpoints
+│   ├── models.py            # Pydantic data models
+│   ├── database.py          # Supabase operations
+│   ├── food_agent.py        # Legacy chat agent (free-form commands)
+│   └── agents/              # Multi-agent recommendation system
+│       ├── orchestrator.py      # Coordinates all agents
+│       ├── mood_agent.py        # Mood → food mapping
+│       ├── question_agent.py    # Preference questions
+│       ├── taste_preferences_agent.py  # Feedback analysis
+│       ├── food_availability_agent.py  # Available dishes
+│       ├── hybrid_retriever.py  # 4-stage retrieval pipeline
+│       ├── scoring.py           # Multi-factor scoring algorithm
+│       ├── embedding_service.py # Vector embeddings (sentence-transformers)
+│       └── cache.py             # Multi-layer caching
+├── scraper.py               # Menu scraping + embedding generation
+├── tests/                   # pytest unit & e2e tests
+├── docs/                    # Documentation
+└── supabase/                # Database migrations
 ```
 
 ## The 4-Stage Hybrid Retrieval Pipeline
@@ -1229,7 +1236,7 @@ This is the entire BerkeleyBites system - every component, every tool, every dat
 │   ┌─────────────────────────────────────────────────────────────────────────────────┐  │
 │   │                                                                                 │  │
 │   │                              AI AGENT SYSTEM                                    │  │
-│   │                              (agents/ folder)                                   │  │
+│   │                              (backend/agents/)                                  │  │
 │   │                                                                                 │  │
 │   └─────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                         │
@@ -2355,7 +2362,7 @@ LIMIT 30;
 │   LLM                  Write recommendations             Perplexity API                │
 │                                                          hybrid_retriever.py (Stage 4) │
 │                                                                                         │
-│   Multi-Agent          Separate concerns                 agents/ folder                │
+│   Multi-Agent          Separate concerns                 backend/agents/               │
 │                        Mood, taste, food agents          orchestrator.py               │
 │                                                                                         │
 │   Hybrid Retrieval     Combine SQL + Vector + Scoring    hybrid_retriever.py           │
@@ -2403,26 +2410,26 @@ This section explains EVERY file in the project, what it does, and how to talk a
 
 ```
 BerkeleyBites/
-├── scraper.py                    # Gets menu from Berkeley website
-├── food_agent.py                 # Legacy file (can mention: "early prototype")
+├── scraper.py                    # Gets menu from Berkeley website + embedding generation
 │
-├── backend/                      # Python server (API)
+├── backend/                      # Python server (ALL backend code in one place)
 │   ├── __init__.py              # Makes folder a Python package
-│   ├── main.py                  # API endpoints (the heart of the backend!)
+│   ├── main.py                  # FastAPI endpoints (the heart of the backend!)
 │   ├── database.py              # Supabase connection and queries
-│   └── models.py                # Pydantic models for validation
-│
-├── agents/                       # AI recommendation system
-│   ├── __init__.py              # Package init
-│   ├── orchestrator.py          # Coordinates all agents
-│   ├── mood_agent.py            # Maps mood to food guidance
-│   ├── question_agent.py        # Handles the 4 questions
-│   ├── taste_preferences_agent.py  # Analyzes feedback history
-│   ├── food_availability_agent.py  # Gets available dishes
-│   ├── hybrid_retriever.py      # 4-stage retrieval pipeline
-│   ├── scoring.py               # Multi-factor scoring algorithm
-│   ├── embedding_service.py     # Creates dish embeddings
-│   └── cache.py                 # In-memory caching
+│   ├── models.py                # Pydantic models for validation
+│   ├── food_agent.py            # Legacy chat agent (free-form commands)
+│   │
+│   └── agents/                  # AI recommendation system (multi-agent)
+│       ├── __init__.py          # Package init + exports
+│       ├── orchestrator.py      # Coordinates all agents
+│       ├── mood_agent.py        # Maps mood to food guidance
+│       ├── question_agent.py    # Handles the 4 questions
+│       ├── taste_preferences_agent.py  # Analyzes feedback history
+│       ├── food_availability_agent.py  # Gets available dishes
+│       ├── hybrid_retriever.py  # 4-stage retrieval pipeline
+│       ├── scoring.py           # Multi-factor scoring algorithm
+│       ├── embedding_service.py # Creates dish embeddings
+│       └── cache.py             # In-memory caching
 │
 ├── frontend/                     # React app (what users see)
 │   ├── src/
@@ -2568,14 +2575,14 @@ BerkeleyBites/
 
 ---
 
-## Agent Files (agents/)
+## Agent Files (backend/agents/)
 
-### agents/orchestrator.py - "The Brain"
+### backend/agents/orchestrator.py - "The Brain"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│   FILE: agents/orchestrator.py                                                          │
+│   FILE: backend/agents/orchestrator.py                                                  │
 │   ────────────────────────────                                                          │
 │                                                                                         │
 │   WHAT IT DOES:                                                                         │
@@ -2603,12 +2610,12 @@ BerkeleyBites/
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### agents/mood_agent.py - "The Mood Interpreter"
+### backend/agents/mood_agent.py - "The Mood Interpreter"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│   FILE: agents/mood_agent.py                                                            │
+│   FILE: backend/agents/mood_agent.py                                                    │
 │   ──────────────────────────                                                            │
 │                                                                                         │
 │   WHAT IT DOES:                                                                         │
@@ -2633,12 +2640,12 @@ BerkeleyBites/
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### agents/question_agent.py - "The Answer Parser"
+### backend/agents/question_agent.py - "The Answer Parser"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│   FILE: agents/question_agent.py                                                        │
+│   FILE: backend/agents/question_agent.py                                                │
 │   ──────────────────────────────                                                        │
 │                                                                                         │
 │   WHAT IT DOES:                                                                         │
@@ -2665,12 +2672,12 @@ BerkeleyBites/
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### agents/taste_preferences_agent.py - "The History Analyzer"
+### backend/agents/taste_preferences_agent.py - "The History Analyzer"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│   FILE: agents/taste_preferences_agent.py                                               │
+│   FILE: backend/agents/taste_preferences_agent.py                                       │
 │   ───────────────────────────────────────                                               │
 │                                                                                         │
 │   WHAT IT DOES:                                                                         │
@@ -2695,12 +2702,12 @@ BerkeleyBites/
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### agents/food_availability_agent.py - "The Menu Scout"
+### backend/agents/food_availability_agent.py - "The Menu Scout"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│   FILE: agents/food_availability_agent.py                                               │
+│   FILE: backend/agents/food_availability_agent.py                                       │
 │   ───────────────────────────────────────                                               │
 │                                                                                         │
 │   WHAT IT DOES:                                                                         │
@@ -2726,12 +2733,12 @@ BerkeleyBites/
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### agents/hybrid_retriever.py - "The 4-Stage Pipeline"
+### backend/agents/hybrid_retriever.py - "The 4-Stage Pipeline"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│   FILE: agents/hybrid_retriever.py                                                      │
+│   FILE: backend/agents/hybrid_retriever.py                                              │
 │   ────────────────────────────────                                                      │
 │                                                                                         │
 │   WHAT IT DOES:                                                                         │
@@ -2773,12 +2780,12 @@ BerkeleyBites/
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### agents/scoring.py - "The Ranking Algorithm"
+### backend/agents/scoring.py - "The Ranking Algorithm"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│   FILE: agents/scoring.py                                                               │
+│   FILE: backend/agents/scoring.py                                                       │
 │   ───────────────────────                                                               │
 │                                                                                         │
 │   WHAT IT DOES:                                                                         │
@@ -2809,12 +2816,12 @@ BerkeleyBites/
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### agents/embedding_service.py - "The Vector Generator"
+### backend/agents/embedding_service.py - "The Vector Generator"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│   FILE: agents/embedding_service.py                                                     │
+│   FILE: backend/agents/embedding_service.py                                             │
 │   ─────────────────────────────────                                                     │
 │                                                                                         │
 │   WHAT IT DOES:                                                                         │
@@ -2838,12 +2845,12 @@ BerkeleyBites/
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### agents/cache.py - "The Speed Booster"
+### backend/agents/cache.py - "The Speed Booster"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                         │
-│   FILE: agents/cache.py                                                                 │
+│   FILE: backend/agents/cache.py                                                         │
 │   ─────────────────────                                                                 │
 │                                                                                         │
 │   WHAT IT DOES:                                                                         │
