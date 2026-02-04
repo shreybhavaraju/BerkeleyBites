@@ -143,11 +143,11 @@ Each layer has ONE job:
 │   │       models.py           │    │    AI AGENTS (/agents/)        │     │
 │   │                           │    │                                │     │
 │   │  Data definitions:        │    │  orchestrator.py (coordinator) │     │
-│   │  - Dish                   │    │  mood_agent.py                 │     │
-│   │  - UserProfile            │    │  question_agent.py             │     │
-│   │  - ChatMessage            │    │  taste_preferences_agent.py    │     │
-│   │  - etc.                   │    │  hybrid_retriever.py           │     │
-│   └───────────────────────────┘    │  scoring.py                    │     │
+│   │  - Dish                   │    │  question_agent.py             │     │
+│   │  - UserProfile            │    │  taste_preferences_agent.py    │     │
+│   │  - ChatMessage            │    │  food_availability_agent.py    │     │
+│   │  - etc.                   │    │  hybrid_retriever.py (engine)  │     │
+│   └───────────────────────────┘    │  scoring.py (mood weights)     │     │
 │                                    │  embedding_service.py          │     │
 │                                    │  cache.py                      │     │
 │                                    └────────────────────────────────┘     │

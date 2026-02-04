@@ -11,7 +11,6 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.agents.mood_agent import get_user_mood, set_user_mood, MOOD_GUIDANCE
 from backend.agents.food_availability_agent import (
     get_available_dishes,
     get_menu_summary,
@@ -189,65 +188,6 @@ def sample_user_profile():
         "avoid_nuts": False,
         "avoid_soy": False,
     }
-
-
-# ============================================
-# MOOD AGENT TESTS
-# ============================================
-
-class TestMoodAgent:
-    """Tests for the Mood Agent."""
-
-    def test_set_and_get_mood(self):
-        """Test setting and getting user mood."""
-        set_user_mood("grumpy")
-        result = get_user_mood.invoke({})
-
-        assert "GRUMPY" in result
-        assert "comfort food" in result.lower()
-
-    def test_all_moods_have_guidance(self):
-        """Test that all moods have defined guidance."""
-        moods = ["happy", "grumpy", "stressed", "tired", "adventurous"]
-
-        for mood in moods:
-            assert mood in MOOD_GUIDANCE
-            assert "description" in MOOD_GUIDANCE[mood]
-            assert "food_suggestion" in MOOD_GUIDANCE[mood]
-            assert "prefer_categories" in MOOD_GUIDANCE[mood]
-
-    def test_mood_happy(self):
-        """Test happy mood guidance."""
-        set_user_mood("happy")
-        result = get_user_mood.invoke({})
-
-        assert "HAPPY" in result
-        assert "adventurous" in result.lower() or "celebratory" in result.lower()
-
-    def test_mood_stressed(self):
-        """Test stressed mood guidance."""
-        set_user_mood("stressed")
-        result = get_user_mood.invoke({})
-
-        assert "STRESSED" in result
-        assert "light" in result.lower() or "easy" in result.lower()
-
-    def test_mood_tired(self):
-        """Test tired mood guidance."""
-        set_user_mood("tired")
-        result = get_user_mood.invoke({})
-
-        assert "TIRED" in result
-        assert "energy" in result.lower() or "protein" in result.lower()
-
-    def test_invalid_mood_defaults_to_current(self):
-        """Test that invalid mood doesn't crash."""
-        set_user_mood("happy")  # Set a valid mood first
-        set_user_mood("invalid_mood")  # Try invalid
-        result = get_user_mood.invoke({})
-
-        # Should still return valid result (keeps previous mood)
-        assert "Current Mood:" in result
 
 
 # ============================================
@@ -454,14 +394,15 @@ class TestOrchestrator:
             user_mood="happy"
         )
 
-        context = gather_agent_context(meal="Lunch")
+        # gather_agent_context now takes question_context for mood
+        context = gather_agent_context(meal="Lunch", question_context={"mood": "happy"})
 
         assert "mood" in context
         assert "preferences" in context
         assert "dishes" in context
 
-        # Mood should reflect happy
-        assert "HAPPY" in context["mood"]
+        # Mood should reflect happy (passed through question_context)
+        assert context["mood"] == "happy"
 
         # Dishes should be filtered for lunch
         assert "Vegan Buddha Bowl" in context["dishes"]
@@ -484,19 +425,18 @@ class TestIntegration:
             user_mood="tired"
         )
 
-        context = gather_agent_context(meal="")
+        # Mood is now passed through question_context
+        context = gather_agent_context(meal="", question_context={"mood": "tired"})
 
         # All context should be gathered
         assert len(context) == 3
         assert all(key in context for key in ["mood", "preferences", "dishes"])
 
-        # Mood should be tired
-        assert "TIRED" in context["mood"]
-        assert "energy" in context["mood"].lower()
+        # Mood should be tired (from question_context)
+        assert context["mood"] == "tired"
 
     def test_mood_affects_context(self, sample_menu_df, sample_feedback_df, sample_user_profile):
         """Test that mood changes affect the context."""
-        # Set stressed mood
         set_orchestrator_context(
             menu_df=sample_menu_df,
             feedback_df=sample_feedback_df,
@@ -504,22 +444,15 @@ class TestIntegration:
             user_id="test_user",
             user_mood="stressed"
         )
-        context_stressed = gather_agent_context()
 
-        # Set adventurous mood
-        set_orchestrator_context(
-            menu_df=sample_menu_df,
-            feedback_df=sample_feedback_df,
-            user_profile=sample_user_profile,
-            user_id="test_user",
-            user_mood="adventurous"
-        )
-        context_adventurous = gather_agent_context()
+        # Mood is now passed through question_context
+        context_stressed = gather_agent_context(question_context={"mood": "stressed"})
+        context_adventurous = gather_agent_context(question_context={"mood": "adventurous"})
 
-        # Contexts should be different
+        # Contexts should have different moods
         assert context_stressed["mood"] != context_adventurous["mood"]
-        assert "STRESSED" in context_stressed["mood"]
-        assert "ADVENTUROUS" in context_adventurous["mood"]
+        assert context_stressed["mood"] == "stressed"
+        assert context_adventurous["mood"] == "adventurous"
 
 
 if __name__ == "__main__":

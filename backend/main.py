@@ -34,7 +34,6 @@ from .models import (
 # Import from sibling modules
 from scraper import is_data_fresh, scrape_and_transform
 from .agents import set_orchestrator_context, get_recommendation
-from .agents.mood_agent import MOOD_GUIDANCE
 from .agents.question_agent import (
     get_next_question,
     all_questions_answered,
@@ -43,6 +42,36 @@ from .agents.question_agent import (
 
 # Import database layer
 from . import database as db
+
+
+# ===========================================
+# Constants
+# ===========================================
+
+# Mood to food guidance mapping (used by /api/profile/mood endpoint)
+# Note: Actual mood scoring for recommendations is in backend/agents/scoring.py
+MOOD_GUIDANCE = {
+    "happy": {
+        "description": "Feeling happy and content",
+        "food_suggestion": "You're in a great mood! Try something adventurous or celebratory.",
+    },
+    "grumpy": {
+        "description": "Feeling irritable or annoyed",
+        "food_suggestion": "Comfort food can help lift your spirits. Look for hearty, satisfying dishes.",
+    },
+    "stressed": {
+        "description": "Feeling anxious or overwhelmed",
+        "food_suggestion": "Go for foods that are easy to eat. Light, nutritious options can help stabilize your mood.",
+    },
+    "tired": {
+        "description": "Feeling low on energy",
+        "food_suggestion": "You need an energy boost! Look for protein-rich foods and complex carbohydrates.",
+    },
+    "adventurous": {
+        "description": "Feeling curious and open to new experiences",
+        "food_suggestion": "Perfect time to try something new! Look for unique dishes or international cuisine.",
+    },
+}
 
 
 # ===========================================
@@ -76,15 +105,14 @@ def load_menu_data() -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def load_feedback(user_id: Optional[str] = None) -> pd.DataFrame:
-    """Load existing feedback from Supabase."""
-    if user_id:
-        feedback = db.get_user_feedback(user_id)
-    else:
-        # Get all feedback (for agents that need full history)
-        client = db.get_client()
-        response = client.table("feedback").select("*").execute()
-        feedback = response.data
+def load_feedback(user_id: str) -> pd.DataFrame:
+    """Load existing feedback from Supabase for a specific user.
+
+    Args:
+        user_id: Required user ID to load feedback for.
+                 Never loads all users' feedback for security.
+    """
+    feedback = db.get_user_feedback(user_id)
 
     if feedback:
         df = pd.DataFrame(feedback)
@@ -168,7 +196,7 @@ def filter_by_profile(df: pd.DataFrame, profile: UserProfile) -> pd.DataFrame:
 def update_agent_context(user_id: str) -> pd.DataFrame:
     """Update the agent context and return filtered menu."""
     menu_df = load_menu_data()
-    feedback_df = load_feedback()
+    feedback_df = load_feedback(user_id)
     profile = get_user_profile(user_id)
     mood = get_user_mood(user_id)
 
@@ -614,11 +642,10 @@ async def generate_recommendation(
     # Get context from answers
     question_context = format_context_for_recommendation(answered)
 
-    # Update the mood based on the answer (for orchestrator compatibility)
+    # Save mood for future sessions (no need to re-update agent context
+    # since the orchestrator gets mood directly from question_context)
     if "mood" in question_context:
         save_user_mood(user_id, question_context["mood"])
-        # Re-update agent context with new mood
-        update_agent_context(user_id)
 
     # Get recommendation with additional context
     result = get_recommendation(
