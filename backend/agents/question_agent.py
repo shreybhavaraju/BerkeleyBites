@@ -68,19 +68,6 @@ def get_next_question(answered: dict) -> Optional[dict]:
     return None
 
 
-def get_question_by_id(question_id: str) -> Optional[dict]:
-    """
-    Get a specific question by ID.
-
-    Args:
-        question_id: The question ID to look up
-
-    Returns:
-        The question dict, or None if not found.
-    """
-    return next((q for q in QUESTIONS if q["id"] == question_id), None)
-
-
 def all_questions_answered(answered: dict) -> bool:
     """
     Check if all questions have been answered.

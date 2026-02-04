@@ -18,7 +18,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.chat_history import InMemoryChatMessageHistory
 
 # ============================================
-# GLOBAL STATE (set by Streamlit app)
+# GLOBAL STATE (set by FastAPI backend)
 # ============================================
 
 _menu_df: Optional[pd.DataFrame] = None

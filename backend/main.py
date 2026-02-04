@@ -176,7 +176,7 @@ def update_agent_context(user_id: str) -> pd.DataFrame:
     # Filter menu by profile
     filtered_df = filter_by_profile(menu_df, profile)
 
-    # Update legacy food_agent context
+    # Update food_agent context (handles free-form chat commands)
     set_context(
         menu_df=filtered_df,
         feedback_df=feedback_df,
@@ -184,7 +184,7 @@ def update_agent_context(user_id: str) -> pd.DataFrame:
         user_id=user_id
     )
 
-    # Update orchestrator context
+    # Update orchestrator context (handles /recommend with multi-agent system)
     set_orchestrator_context(
         menu_df=filtered_df,
         feedback_df=feedback_df,

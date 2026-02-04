@@ -47,15 +47,10 @@ _user_mood: str = "happy"
 
 
 def set_user_mood(mood: str) -> None:
-    """Set the current user mood (called by app.py)."""
+    """Set the current user mood (called by orchestrator)."""
     global _user_mood
     if mood in MOOD_GUIDANCE:
         _user_mood = mood
-
-
-def get_mood_directly() -> str:
-    """Get the current mood value directly (for internal use)."""
-    return _user_mood
 
 
 @tool
