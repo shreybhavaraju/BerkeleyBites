@@ -697,12 +697,11 @@ BerkeleyBites/
 │   └── agents/                  # Multi-agent system
 │       ├── __init__.py          # Package exports
 │       ├── orchestrator.py      # Coordinates all agents
-│       ├── mood_agent.py        # Mood → food mapping
-│       ├── question_agent.py    # Preference questions
-│       ├── taste_preferences_agent.py   # Feedback analysis
-│       ├── food_availability_agent.py   # Available dishes
-│       ├── hybrid_retriever.py  # 4-stage RAG pipeline
-│       ├── scoring.py           # Dish ranking algorithm
+│       ├── question_agent.py    # Preference questions (mood, craving, spice, time)
+│       ├── taste_preferences_agent.py   # UI summary: feedback analysis
+│       ├── food_availability_agent.py   # UI summary: available dishes
+│       ├── hybrid_retriever.py  # 4-stage RAG pipeline (the real engine)
+│       ├── scoring.py           # Dish ranking with mood weights
 │       ├── embedding_service.py # Vector generation
 │       └── cache.py             # Performance caching
 │
@@ -1005,10 +1004,9 @@ main.py receives request
     │
     ├── Calls orchestrator.get_recommendation()
     │       │
-    │       ├── Calls mood_agent
-    │       ├── Calls taste_preferences_agent
-    │       ├── Calls food_availability_agent
-    │       └── Runs hybrid_retriever
+    │       ├── Passes question_context to hybrid_retriever
+    │       ├── Scoring uses mood weights from scoring.py
+    │       └── (UI summaries from taste/food agents only for display)
     │
     └── Returns JSON response to frontend
 ```
@@ -1164,13 +1162,18 @@ class FeedbackRequest(BaseModel):
 
 The agents in `backend/agents/` form a multi-agent system. Each agent has a specific responsibility.
 
+**Architecture Note:** The "agents" are not AI agents - they're specialized modules:
+- **question_agent**: Collects user preferences (mood, craving, spice, time)
+- **hybrid_retriever + scoring**: The actual recommendation engine
+- **taste_preferences_agent & food_availability_agent**: Generate UI summary cards only
+
 ### backend/agents/orchestrator.py
 
-**Purpose:** The "conductor" that coordinates all other agents.
+**Purpose:** The "conductor" that coordinates recommendations.
 
 **What calls it:** `main.py` when user wants a recommendation
 
-**What it calls:** mood_agent, taste_preferences_agent, food_availability_agent, hybrid_retriever
+**What it calls:** question_agent (for flow), hybrid_retriever (for recommendations), taste_preferences_agent & food_availability_agent (for UI summaries only)
 
 ### How Orchestration Works
 
@@ -1178,55 +1181,50 @@ The agents in `backend/agents/` form a multi-agent system. Each agent has a spec
 def get_recommendation(
     user_id: str,
     meal_period: str,
-    answered_questions: dict
+    question_context: dict  # mood, craving, spice_level, time_constraint
 ) -> RecommendationResponse:
     """
-    Coordinate agents to generate a recommendation.
+    Coordinate recommendation generation.
 
     STEP-BY-STEP:
 
-    1. SET MOOD CONTEXT
-       mood_agent.set_user_mood(answered_questions["mood"])
-       # This updates global state so mood_agent knows current mood
+    1. TRY HYBRID RETRIEVER (primary path)
+       # The hybrid path gets everything from question_context directly.
+       # No need to call gather_agent_context() - avoids redundant work.
 
-    2. GATHER AGENT CONTEXTS (in parallel conceptually)
-       mood_context = mood_agent.get_user_mood()
-       # Returns: "Current Mood: STRESSED\nFood Guidance: Go for comfort food..."
+       result = hybrid_retriever.retrieve_recommendations(
+           user_id=user_id,
+           user_context=UserContext(
+               mood=question_context["mood"],
+               craving=question_context["craving"],
+               spice_level=question_context["spice_level"],
+               time_constraint=question_context["time_constraint"]
+           ),
+           meal_period=meal_period
+       )
 
-       taste_context = taste_preferences_agent.get_taste_preferences()
-       # Returns: "Based on history: Likes Asian, dislikes heavy pasta..."
+    2. BUILD UI SUMMARIES (from question answers)
+       # Summaries are built directly from question_context
+       # taste_preferences_agent and food_availability_agent
+       # are only called for the legacy fallback path
 
-       availability_context = food_availability_agent.get_available_dishes()
-       # Returns: "Found 180 dishes for lunch, 45 vegetarian options..."
-
-    3. BUILD PROMPT
-       prompt = f'''
-       User Context:
-       {mood_context}
-       {taste_context}
-
-       Available Dishes:
-       {availability_context}
-
-       Generate a personalized recommendation.
-       '''
-
-    4. RUN HYBRID RETRIEVER
-       final_recommendation = hybrid_retriever.retrieve(
-           query=answered_questions["craving"],
-           user_context=prompt,
+       summaries = {
+           "mood": {"icon": "😊", "title": "Mood", "points": [...]},
+           "craving": {"icon": "🍽️", "title": "Craving", "points": [...]},
            ...
+       }
+
+    3. RETURN RESPONSE
+       return RecommendationResponse(
+           agent_summaries=summaries,
+           recommendation=result["recommendation"]
        )
 
-    5. FORMAT RESPONSE
-       return RecommendationResponse(
-           agent_summaries={
-               "mood": format_mood_summary(mood_context),
-               "preferences": format_taste_summary(taste_context),
-               "availability": format_availability_summary(availability_context)
-           },
-           recommendation=final_recommendation
-       )
+    The hybrid retriever does the real work:
+    - Stage 1: SQL filters (dietary safety)
+    - Stage 2: Vector search (semantic matching)
+    - Stage 3: scoring.py (mood/taste/craving weights)
+    - Stage 4: LLM picks top 3-4 with explanations
     """
 ```
 
@@ -1243,59 +1241,6 @@ def format_mood_summary(mood_text: str) -> dict:
     #     "title": "Mood",
     #     "points": ["Feeling stressed", "Go for comfort food"]
     # }
-```
-
----
-
-### backend/agents/mood_agent.py
-
-**Purpose:** Map user mood to food guidance. No AI - just a lookup table.
-
-**Why no AI?** This is deterministic logic. "Stressed → comfort food" is a fixed rule. No need to waste API calls on something predictable.
-
-### How It Works
-
-```python
-# The mapping table
-MOOD_GUIDANCE = {
-    "happy": {
-        "description": "Feeling happy and content",
-        "food_suggestion": "Try something adventurous or celebratory!",
-        "prefer_categories": ["entrees", "chef's special"],
-        "avoid_categories": []
-    },
-    "stressed": {
-        "description": "Feeling anxious or overwhelmed",
-        "food_suggestion": "Go for comfort food. Warm soups, pasta...",
-        "prefer_categories": ["soups", "comfort food", "pasta"],
-        "avoid_categories": ["fried foods"]
-    },
-    # ... more moods
-}
-
-# Global state (set by orchestrator)
-_user_mood: str = "happy"
-
-def set_user_mood(mood: str):
-    """Called by orchestrator before getting mood guidance."""
-    global _user_mood
-    _user_mood = mood
-
-@tool  # LangChain tool decorator
-def get_user_mood() -> str:
-    """
-    Get mood-based food guidance.
-
-    HOW IT WORKS:
-    1. Look up current mood in MOOD_GUIDANCE dict
-    2. Format as readable string
-    3. Return guidance text
-    """
-    guidance = MOOD_GUIDANCE[_user_mood]
-    return f"""Current Mood: {_user_mood.upper()}
-{guidance['description']}
-Food Guidance: {guidance['food_suggestion']}
-Preferred categories: {guidance['prefer_categories']}"""
 ```
 
 ---
@@ -2045,21 +1990,23 @@ answered_questions = {
 
 ```python
 # backend/agents/orchestrator.py
-def get_recommendation(user_id, meal_period, answered_questions):
+def get_recommendation(user_id, meal_period, question_context):
 
-    # Set mood for mood agent
-    mood_agent.set_user_mood(answered_questions["mood"])
+    # Pass question_context directly to hybrid retriever
+    # (mood, craving, spice_level, time_constraint)
+    # Mood weights are applied in scoring.py
 
-    # Get context from each agent
-    mood_context = mood_agent.get_user_mood()
-    # "Current Mood: STRESSED
-    #  Food Guidance: Go for comfort food..."
+    result = hybrid_retriever.retrieve_recommendations(
+        user_id=user_id,
+        user_context=UserContext(
+            mood=question_context["mood"],  # → scoring.py MOOD_WEIGHTS
+            craving=question_context["craving"],
+            ...
+        ),
+        meal_period=meal_period
+    )
 
-    taste_context = taste_preferences_agent.get_taste_preferences(user_id)
-    # "Taste Profile: Likes Asian food, avoids heavy pasta..."
-
-    availability = food_availability_agent.get_available_dishes(meal_period)
-    # "Found 180 dishes for lunch..."
+    # UI summary agents (taste/food) only called for display cards
 ```
 
 ### Step 6: Hybrid Retriever Runs 4-Stage Pipeline
@@ -2402,17 +2349,16 @@ def update_profile():
 **Q: "Walk me through what happens when a user asks for a recommendation."**
 > 1. Frontend sends POST /api/chat with "/recommend lunch"
 > 2. Question agent asks 4 preference questions (mood, craving, spice, time)
-> 3. Orchestrator gathers context from mood agent, taste agent, food agent
+> 3. User answers go directly to the hybrid retriever (no intermediate agents)
 > 4. Hybrid retriever runs 4-stage pipeline: SQL filters → Vector search → Scoring → LLM
-> 5. LLM writes personalized recommendation from top 10 dishes
-> 6. Response includes agent summaries + recommendation text
+> 5. LLM writes personalized recommendation from top 10 pre-scored dishes
+> 6. Response includes UI summary cards + recommendation text
 
-**Q: "Why multiple agents instead of one LLM call?"**
-> Separation of concerns. Each agent does one thing: Mood agent uses a lookup table (no AI needed), Taste agent analyzes history with SQL, Food agent queries available dishes. This makes the system:
-> - Fast (80% is deterministic code, not LLM)
-> - Cheap (LLM only called once at the end)
-> - Safe (SQL guarantees dietary restrictions)
-> - Testable (each agent tested in isolation)
+**Q: "Why do you have separate agent files?"**
+> The food_availability and taste_preferences modules generate the UI summary cards that show users what the system analyzed. The actual recommendation logic is centralized in hybrid_retriever and scoring - this separation keeps the UI concern separate from the recommendation algorithm. They're called "agents" but they're really just formatters.
+
+**Q: "How does mood affect recommendations?"**
+> The user's mood answer goes to scoring.py which has a MOOD_WEIGHTS dict mapping moods to food category preferences. A stressed user gets +25% weight toward comfort food categories, tired users toward protein-rich options, etc. This is deterministic scoring, not LLM guessing.
 
 **Q: "How do you ensure dietary safety?"**
 > SQL filters run FIRST in the pipeline. Before any AI involvement, we eliminate dishes that violate restrictions. A vegetarian never sees meat dishes. The LLM only sees pre-validated dishes. This is a hard guarantee, not probabilistic.
@@ -2528,8 +2474,8 @@ pytest tests/ -v
 |------|------|
 | Add API endpoint | backend/main.py |
 | Add database query | backend/database.py |
-| Change mood mappings | backend/agents/mood_agent.py |
-| Modify questions | backend/agents/question_agent.py |
+| Change mood scoring weights | backend/agents/scoring.py |
+| Modify preference questions | backend/agents/question_agent.py |
 | Adjust scoring weights | backend/agents/scoring.py |
 | Change retrieval pipeline | backend/agents/hybrid_retriever.py |
 | Add frontend component | frontend/src/components/ |

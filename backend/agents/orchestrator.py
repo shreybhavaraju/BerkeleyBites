@@ -21,7 +21,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.chat_history import InMemoryChatMessageHistory
 
 # Import all agent tools
-from .mood_agent import get_user_mood, set_user_mood
 from .food_availability_agent import get_available_dishes, get_menu_summary, set_menu_data
 from .taste_preferences_agent import get_taste_preferences, get_similar_liked_dishes, set_feedback_data
 
@@ -87,7 +86,6 @@ def set_orchestrator_context(
     # Set context for each agent
     set_menu_data(menu_df)
     set_feedback_data(feedback_df, user_id, menu_df)
-    set_user_mood(user_mood)
 
 
 def get_user_profile_str() -> str:
@@ -128,20 +126,21 @@ def get_user_profile_str() -> str:
     return ", ".join(restrictions) if restrictions else "No dietary restrictions"
 
 
-def gather_agent_context(meal: str = "") -> dict:
+def gather_agent_context(meal: str = "", question_context: Optional[dict] = None) -> dict:
     """
-    Call all sub-agents to gather context for recommendations.
+    Call sub-agents to gather context for UI summaries and legacy recommendations.
+
+    Note: This is only called for the legacy fallback path. The hybrid path
+    gets mood/craving/spice/time from question_context directly.
 
     Returns:
         Dictionary with context from each agent.
     """
     context = {}
+    qc = question_context or {}
 
-    # 1. Get user mood
-    try:
-        context["mood"] = get_user_mood.invoke({})
-    except Exception as e:
-        context["mood"] = f"Error getting mood: {e}"
+    # 1. Set mood from question context (for UI summaries)
+    context["mood"] = qc.get("mood", "happy")
 
     # 2. Get taste preferences
     try:
@@ -340,6 +339,87 @@ def get_agent_summaries(context: dict, meal: str = "", question_context: Optiona
     return summaries
 
 
+def _build_summaries_from_questions(question_context: dict, meal: str = "") -> dict:
+    """
+    Build UI summaries directly from question answers.
+
+    This is used by the hybrid path to avoid calling gather_agent_context()
+    which does redundant work (the hybrid retriever gets all it needs from
+    question_context directly).
+    """
+    qc = question_context or {}
+    summaries = {}
+
+    # Mood Summary
+    mood_value = qc.get("mood", "")
+    mood_points = []
+    mood_to_check = mood_value.lower() if mood_value else ""
+
+    if "happy" in mood_to_check:
+        mood_points = ["You're feeling happy today", "Great time to try something new!"]
+    elif "grumpy" in mood_to_check:
+        mood_points = ["You're feeling a bit grumpy", "Comfort food might help lift your spirits"]
+    elif "stressed" in mood_to_check:
+        mood_points = ["You're feeling stressed", "Something warm and soothing could help"]
+    elif "tired" in mood_to_check:
+        mood_points = ["You're feeling tired", "Energy-boosting foods recommended"]
+    elif "adventurous" in mood_to_check:
+        mood_points = ["You're feeling adventurous!", "Perfect day to explore new cuisines"]
+    else:
+        mood_points = ["Ready for a great meal"]
+
+    summaries["mood"] = {
+        "icon": "😊",
+        "title": "Mood Analysis",
+        "points": mood_points
+    }
+
+    # Craving Summary
+    if qc.get("craving"):
+        craving = qc["craving"]
+        craving_map = {
+            "comfort": ["Looking for comfort food", "Warm, hearty dishes preferred"],
+            "healthy": ["Craving something healthy", "Fresh, nutritious options in mind"],
+            "quick": ["Want a quick bite", "Fast, convenient options prioritized"],
+            "filling": ["Hungry for a big meal", "Substantial portions needed"],
+        }
+        summaries["craving"] = {
+            "icon": "🍽️",
+            "title": "Food Craving",
+            "points": craving_map.get(craving, [f"Craving: {craving}"])
+        }
+
+    # Spice Summary
+    if qc.get("spice_level"):
+        spice = qc["spice_level"]
+        spice_map = {
+            "mild": ["Keeping it mild today", "Gentle flavors preferred"],
+            "medium": ["Open to some kick", "Moderate spice welcome"],
+            "spicy": ["Bringing the heat!", "Spicy dishes preferred"],
+        }
+        summaries["spice"] = {
+            "icon": "🌶️",
+            "title": "Spice Level",
+            "points": spice_map.get(spice, [f"Spice preference: {spice}"])
+        }
+
+    # Time Summary
+    if qc.get("time_constraint"):
+        time_val = qc["time_constraint"]
+        time_map = {
+            "rush": ["In a hurry", "Quick service spots prioritized"],
+            "normal": ["Normal mealtime", "Standard dining options"],
+            "leisurely": ["Taking your time", "Sit-down options work well"],
+        }
+        summaries["time"] = {
+            "icon": "⏰",
+            "title": "Time Available",
+            "points": time_map.get(time_val, [f"Time: {time_val}"])
+        }
+
+    return summaries
+
+
 def build_recommendation_prompt(context: dict, meal: str = "", question_context: Optional[dict] = None) -> str:
     """Build a comprehensive prompt with all agent context."""
     qc = question_context or {}
@@ -452,20 +532,14 @@ def get_recommendation(
     llm = get_llm()
 
     try:
-        # Gather context from all sub-agents (for summaries)
-        context = gather_agent_context(meal)
-
-        # Extract summaries for UI display
-        summaries = get_agent_summaries(context, meal, question_context)
-
         # Try hybrid retriever first (if enabled)
+        # The hybrid path gets all context from question_context directly,
+        # so we skip gather_agent_context() to avoid redundant work.
         if _use_hybrid_retriever:
             try:
                 result = _get_hybrid_recommendation(
                     meal=meal,
-                    question_context=question_context,
-                    context=context,
-                    summaries=summaries
+                    question_context=question_context
                 )
                 if result:
                     # Update history
@@ -476,6 +550,10 @@ def get_recommendation(
                 logger.warning(f"Hybrid retriever failed, falling back to legacy: {e}")
 
         # Fallback: Legacy LLM-only approach
+        # Only gather agent context if hybrid failed and we need legacy path
+        context = gather_agent_context(meal, question_context)
+        summaries = get_agent_summaries(context, meal, question_context)
+
         return _get_legacy_recommendation(
             query=query,
             meal=meal,
@@ -502,12 +580,13 @@ def get_recommendation(
 
 def _get_hybrid_recommendation(
     meal: str,
-    question_context: Optional[dict],
-    context: dict,
-    summaries: dict
+    question_context: Optional[dict]
 ) -> Optional[dict]:
     """
     Get recommendation using hybrid retriever.
+
+    The hybrid path builds summaries from question_context directly,
+    avoiding the redundant gather_agent_context() call.
 
     Returns:
         Dict with agent_summaries and recommendation, or None if failed
@@ -518,6 +597,9 @@ def _get_hybrid_recommendation(
         return None
 
     qc = question_context or {}
+
+    # Build summaries directly from question_context (no agent calls needed)
+    summaries = _build_summaries_from_questions(qc, meal)
 
     # Build user context for scoring
     user_context = UserContext(

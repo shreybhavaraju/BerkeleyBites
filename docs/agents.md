@@ -17,8 +17,9 @@ Think of agents like specialists in a hospital:
 - They each do their job, then report to the primary care doctor
 
 In BerkeleyBites:
-- The **Mood Agent** specializes in understanding emotions
-- The **Taste Agent** specializes in analyzing preferences
+- The **Question Agent** collects user preferences (mood, craving, spice, time)
+- The **Taste Agent** generates UI summaries from feedback history
+- The **Hybrid Retriever + Scoring** is the real recommendation engine
 - The **Orchestrator** coordinates them all (like the primary care doctor)
 
 ---
@@ -46,11 +47,11 @@ I've liked Asian food before. What should I eat from today's menu?"
 ```
 Good approach:
 
-1. Mood Agent: "User is tired → suggest energizing foods"
-2. Taste Agent: [queries database] "User likes Asian, dislikes heavy foods"
-3. Food Agent: [queries database] "Today's menu has 245 dishes, 12 match filters"
-4. Question Agent: "User wants healthy food, mild spice, normal time"
-5. Orchestrator: Combines all info → asks AI for final recommendation
+1. Question Agent: "User is tired, wants healthy, mild spice, normal time"
+2. Hybrid Retriever: Runs 4-stage pipeline with mood weights in scoring
+3. Taste Agent: [for UI] "User likes Asian, dislikes heavy foods"
+4. Food Agent: [for UI] "Today's menu has 245 dishes, 12 match filters"
+5. Orchestrator: Returns scored dishes + LLM-written explanation
 ```
 
 **Benefits:**
@@ -70,76 +71,23 @@ Here's every file in the `/agents/` folder and what it does:
 agents/
 ├── __init__.py              # Makes this a Python package
 ├── orchestrator.py          # The coordinator (calls all other agents)
-├── mood_agent.py            # Mood → food suggestions
-├── food_availability_agent.py # Queries available dishes
-├── taste_preferences_agent.py # Analyzes user's likes/dislikes
-├── question_agent.py        # Manages the Q&A flow
-├── hybrid_retriever.py      # The smart dish selection system
-├── scoring.py               # How dishes are ranked
+├── question_agent.py        # Manages the Q&A flow (mood, craving, spice, time)
+├── food_availability_agent.py # UI summary: available dishes
+├── taste_preferences_agent.py # UI summary: user's likes/dislikes
+├── hybrid_retriever.py      # The smart dish selection system (REAL ENGINE)
+├── scoring.py               # How dishes are ranked (includes mood weights)
 ├── embedding_service.py     # Converts text to numbers
 └── cache.py                 # Speeds things up
 ```
 
----
-
-## Agent 1: Mood Agent
-
-**File:** `agents/mood_agent.py`
-
-**Job:** Convert a mood into food recommendations
-
-**How it works:** Simple mapping (no AI needed!)
-
-```python
-MOOD_GUIDANCE = {
-    "happy": {
-        "description": "Feeling happy and content",
-        "food_suggestion": "Great time to try something new and adventurous!",
-        "prefer_categories": ["entrees", "chef's special", "grill"],
-        "avoid_categories": [],
-    },
-    "stressed": {
-        "description": "Feeling anxious or overwhelmed",
-        "food_suggestion": "Go for simple comfort foods. Avoid complicated meals.",
-        "prefer_categories": ["soups", "pasta", "sandwiches"],
-        "avoid_categories": ["spicy"],
-    },
-    "tired": {
-        "description": "Feeling low energy",
-        "food_suggestion": "Choose protein-rich foods for energy.",
-        "prefer_categories": ["protein", "salads", "grain bowls"],
-        "avoid_categories": ["heavy pasta", "fried foods"],
-    },
-    "grumpy": {
-        "description": "Feeling irritable",
-        "food_suggestion": "Comfort food can help lift your spirits.",
-        "prefer_categories": ["soups", "comfort food", "bakery"],
-        "avoid_categories": [],
-    },
-    "adventurous": {
-        "description": "Feeling curious and open",
-        "food_suggestion": "Perfect time to try unusual dishes!",
-        "prefer_categories": ["chef's special", "international"],
-        "avoid_categories": [],
-    },
-}
-```
-
-**Example:**
-```
-Input: "stressed"
-Output: "Feeling anxious. Suggest comfort foods like soups and pasta. Avoid spicy."
-```
-
-**Why this design:**
-- Fast (instant dictionary lookup)
-- Predictable (same mood always gives same result)
-- No API costs
-- Easy to modify (just edit the dictionary)
+**Architecture Note:** The "agents" are not AI agents - they're specialized modules:
+- **question_agent**: Collects user preferences
+- **hybrid_retriever + scoring**: The actual recommendation engine
+- **taste_preferences_agent & food_availability_agent**: Generate UI summary cards only
 
 ---
 
-## Agent 2: Food Availability Agent
+## Agent 1: Food Availability Agent
 
 **File:** `agents/food_availability_agent.py`
 
@@ -681,23 +629,11 @@ USER CLICKS "GET RECOMMENDATION"
 ┌───────────────────────────────────────────────────────────────┐
 │ ORCHESTRATOR (orchestrator.py)                                │
 │                                                               │
-│ 1. Set context for all agents                                │
-│ 2. Call gather_agent_context()                               │
+│ Pass question_context directly to hybrid_retriever            │
+│ (mood, craving, spice, time all go to scoring.py)            │
 └───────────────────────────────────────────────────────────────┘
             │
-   ┌────────┴────────┬────────────────┬──────────────┐
-   │                 │                │              │
-   ▼                 ▼                ▼              ▼
-┌──────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────┐
-│   Mood   │  │   Question   │  │  Taste   │  │   Food   │
-│  Agent   │  │    Agent     │  │  Agent   │  │  Agent   │
-│          │  │              │  │          │  │          │
-│ "Happy → │  │ "Wants       │  │ "Likes   │  │ "245     │
-│ adventure│  │  healthy,    │  │  Asian"  │  │  dishes" │
-│ ous food"│  │  mild spice" │  │          │  │          │
-└──────────┘  └──────────────┘  └──────────┘  └──────────┘
-   │                 │                │              │
-   └────────┬────────┴────────────────┴──────────────┘
+            ▼
             │
             ▼
 ┌───────────────────────────────────────────────────────────────┐

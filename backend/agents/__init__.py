@@ -14,7 +14,6 @@ RAG System Components:
 - Cache: Multi-layer caching for <100ms retrieval
 """
 
-from .mood_agent import get_user_mood
 from .food_availability_agent import get_available_dishes, get_menu_summary
 from .taste_preferences_agent import get_taste_preferences, get_similar_liked_dishes
 from .orchestrator import get_recommendation, set_orchestrator_context
@@ -26,7 +25,6 @@ from .cache import get_cache, warm_cache_sync
 
 __all__ = [
     # Original agents
-    "get_user_mood",
     "get_available_dishes",
     "get_menu_summary",
     "get_taste_preferences",

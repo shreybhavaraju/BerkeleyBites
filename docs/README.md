@@ -78,12 +78,11 @@ BerkeleyBites/
 │
 ├── agents/            # AI recommendation system
 │   ├── orchestrator.py      # Coordinates everything
-│   ├── mood_agent.py        # Maps mood to food guidance
-│   ├── question_agent.py    # Handles the 4 questions
-│   ├── taste_preferences_agent.py  # Analyzes past likes
-│   ├── food_availability_agent.py  # Gets available dishes
-│   ├── hybrid_retriever.py  # 4-stage ranking pipeline
-│   └── scoring.py           # Multi-factor scoring
+│   ├── question_agent.py    # Handles the 4 questions (mood, craving, etc)
+│   ├── taste_preferences_agent.py  # Generates UI summary for taste
+│   ├── food_availability_agent.py  # Generates UI summary for menu
+│   ├── hybrid_retriever.py  # 4-stage ranking pipeline (the real engine)
+│   └── scoring.py           # Multi-factor scoring with mood weights
 │
 ├── scraper.py         # Gets menu from Berkeley website
 └── docs/              # You are here!
