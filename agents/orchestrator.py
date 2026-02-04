@@ -3,10 +3,13 @@ Orchestrator for BerkeleyBites Multi-Agent System
 
 A coordinating agent that calls specialized sub-agents as tools
 to provide personalized food recommendations.
+
+Now integrates HybridRetriever for deterministic scoring before LLM calls.
 """
 
 import os
 import re
+import logging
 from typing import Optional
 import pandas as pd
 from dotenv import load_dotenv
@@ -19,13 +22,22 @@ from langchain_core.chat_history import InMemoryChatMessageHistory
 
 # Import all agent tools
 from .mood_agent import get_user_mood, set_user_mood
-from .temperature_agent import get_current_temperature
 from .food_availability_agent import get_available_dishes, get_menu_summary, set_menu_data
 from .taste_preferences_agent import get_taste_preferences, get_similar_liked_dishes, set_feedback_data
 
+# Import hybrid retriever components
+from .hybrid_retriever import HybridRetriever, get_retriever, RetrieverConfig
+from .scoring import UserContext, DishScore
+
+logger = logging.getLogger(__name__)
+
 # Global state
 _user_profile: Optional[dict] = None
+_user_id: Optional[str] = None
 _message_stores: dict[str, InMemoryChatMessageHistory] = {}
+
+# Hybrid retriever config
+_use_hybrid_retriever: bool = True  # Feature flag
 
 # LLM instance (lazy loaded)
 _llm = None
@@ -68,8 +80,9 @@ def set_orchestrator_context(
         user_id: User's session ID
         user_mood: User's current mood
     """
-    global _user_profile
+    global _user_profile, _user_id
     _user_profile = user_profile
+    _user_id = user_id
 
     # Set context for each agent
     set_menu_data(menu_df)
@@ -130,19 +143,13 @@ def gather_agent_context(meal: str = "") -> dict:
     except Exception as e:
         context["mood"] = f"Error getting mood: {e}"
 
-    # 2. Get current temperature/weather
-    try:
-        context["temperature"] = get_current_temperature.invoke({})
-    except Exception as e:
-        context["temperature"] = f"Error getting temperature: {e}"
-
-    # 3. Get taste preferences
+    # 2. Get taste preferences
     try:
         context["preferences"] = get_taste_preferences.invoke({})
     except Exception as e:
         context["preferences"] = f"Error getting preferences: {e}"
 
-    # 4. Get available dishes
+    # 3. Get available dishes
     try:
         context["dishes"] = get_available_dishes.invoke({
             "meal_period": meal,
@@ -237,31 +244,6 @@ def get_agent_summaries(context: dict, meal: str = "", question_context: Optiona
             "title": "Time Available",
             "points": time_map.get(time_val, [f"Time: {time_val}"])
         }
-
-    # Weather Summary
-    temp_text = context.get("temperature", "")
-    weather_points = []
-    if "°F" in temp_text or "degrees" in temp_text.lower():
-        # Extract temperature info
-        temp_match = re.search(r'(\d+(?:\.\d+)?)\s*°?F', temp_text)
-        if temp_match:
-            temp = float(temp_match.group(1))
-            if temp < 55:
-                weather_points = [f"Berkeley: {temp:.0f}°F, Cool weather", "Warm soups and hot dishes recommended"]
-            elif temp < 70:
-                weather_points = [f"Berkeley: {temp:.0f}°F, Pleasant weather", "Perfect for any food type"]
-            else:
-                weather_points = [f"Berkeley: {temp:.0f}°F, Warm weather", "Light, refreshing foods recommended"]
-        else:
-            weather_points = [temp_text[:80] if temp_text else "Weather data unavailable"]
-    else:
-        weather_points = [temp_text[:80] if temp_text else "Weather data unavailable"]
-
-    summaries["weather"] = {
-        "icon": "🌡️",
-        "title": "Weather Check",
-        "points": weather_points
-    }
 
     # Preferences Summary - Parse the taste preferences output for specific data
     pref_text = context.get("preferences", "")
@@ -396,6 +378,13 @@ def build_recommendation_prompt(context: dict, meal: str = "", question_context:
 
     prompt = f"""You are BerkeleyBites AI, a personalized food recommendation assistant for UC Berkeley dining halls.
 
+CRITICAL RULES:
+- ONLY recommend dishes from the "Available Dishes" list below
+- NEVER search the web or use external information
+- NEVER include dates, times, or timestamps in your response
+- NEVER mention dishes that aren't in the provided list
+- If a dish isn't in the list, it's not available - don't recommend it
+
 I've gathered the following information to help you make personalized recommendations:
 
 ## User's Dietary Profile
@@ -404,9 +393,6 @@ I've gathered the following information to help you make personalized recommenda
 ## User's Current Mood
 {context.get('mood', 'Unknown')}
 {extra_context}
-
-## Current Weather
-{context.get('temperature', 'Unknown')}
 
 ## User's Taste Preferences & History
 {context.get('preferences', 'No history available')}
@@ -418,14 +404,13 @@ I've gathered the following information to help you make personalized recommenda
 Based on ALL the information above, recommend 2-4 specific dishes that would be perfect for this user right now. Consider:
 1. Their mood and what foods suit that emotional state
 2. Their specific cravings and food preferences they just told you
-3. The weather and temperature-appropriate food choices
-4. Their past preferences and ratings history
-5. Their dietary restrictions (these are already filtered in the dish list)
-6. Their time constraints (if in a rush, prioritize quick options)
+3. Their past preferences and ratings history
+4. Their dietary restrictions (these are already filtered in the dish list)
+5. Their time constraints (if in a rush, prioritize quick options)
 
 For each recommendation:
 - Name the specific dish
-- Explain briefly why it's a good match (mood, craving, weather, taste, or combination)
+- Explain briefly why it's a good match (mood, craving, taste, or combination)
 - Mention where to find it (dining hall and meal)
 
 Be concise, friendly, and helpful. Use markdown formatting."""
@@ -444,10 +429,14 @@ def get_recommendation(
 
     This orchestrator:
     1. Calls the mood agent to understand emotional state
-    2. Calls the temperature agent to check weather
-    3. Calls the preferences agent to understand taste history
-    4. Calls the food availability agent to get menu options
-    5. Combines all context and asks the LLM to make recommendations
+    2. Calls the preferences agent to understand taste history
+    3. Calls the food availability agent to get menu options
+    4. Combines all context and asks the LLM to make recommendations
+
+    With hybrid retriever enabled:
+    1. Uses HybridRetriever for deterministic pre-scoring
+    2. Passes top-scored dishes to LLM for final selection
+    3. Returns scored recommendations with explanations
 
     Args:
         query: The user's request (e.g., "recommend lunch")
@@ -463,41 +452,39 @@ def get_recommendation(
     llm = get_llm()
 
     try:
-        # Gather context from all sub-agents
+        # Gather context from all sub-agents (for summaries)
         context = gather_agent_context(meal)
 
         # Extract summaries for UI display
         summaries = get_agent_summaries(context, meal, question_context)
 
-        # Build the comprehensive prompt with question context
-        system_prompt = build_recommendation_prompt(context, meal, question_context)
+        # Try hybrid retriever first (if enabled)
+        if _use_hybrid_retriever:
+            try:
+                result = _get_hybrid_recommendation(
+                    meal=meal,
+                    question_context=question_context,
+                    context=context,
+                    summaries=summaries
+                )
+                if result:
+                    # Update history
+                    history.add_user_message(query)
+                    history.add_ai_message(result["recommendation"])
+                    return result
+            except Exception as e:
+                logger.warning(f"Hybrid retriever failed, falling back to legacy: {e}")
 
-        # Build messages
-        messages = [SystemMessage(content=system_prompt)]
-
-        # Add conversation history (last 4 messages max)
-        for msg in history.messages[-4:]:
-            messages.append(msg)
-
-        # Add current request
-        if meal:
-            user_message = f"Please recommend food for {meal}."
-        else:
-            user_message = "Please recommend food for whatever meal is currently available."
-        messages.append(HumanMessage(content=user_message))
-
-        # Get response from LLM
-        response = llm.invoke(messages)
-        response_text = response.content
-
-        # Update history
-        history.add_user_message(query)
-        history.add_ai_message(response_text)
-
-        return {
-            "agent_summaries": summaries,
-            "recommendation": response_text
-        }
+        # Fallback: Legacy LLM-only approach
+        return _get_legacy_recommendation(
+            query=query,
+            meal=meal,
+            context=context,
+            summaries=summaries,
+            question_context=question_context,
+            history=history,
+            llm=llm
+        )
 
     except Exception as e:
         error_msg = str(e)
@@ -511,6 +498,188 @@ def get_recommendation(
             "agent_summaries": {},
             "recommendation": error_response
         }
+
+
+def _get_hybrid_recommendation(
+    meal: str,
+    question_context: Optional[dict],
+    context: dict,
+    summaries: dict
+) -> Optional[dict]:
+    """
+    Get recommendation using hybrid retriever.
+
+    Returns:
+        Dict with agent_summaries and recommendation, or None if failed
+    """
+    global _user_id, _user_profile
+
+    if not _user_id:
+        return None
+
+    qc = question_context or {}
+
+    # Build user context for scoring
+    user_context = UserContext(
+        user_id=_user_id,
+        mood=qc.get("mood"),
+        craving=qc.get("craving"),
+        spice_level=qc.get("spice_level"),
+        time_constraint=qc.get("time_constraint"),
+        meal_period=meal if meal else None
+    )
+
+    # Get recommendations from hybrid retriever
+    retriever = get_retriever()
+    result = retriever.retrieve_recommendations(
+        user_id=_user_id,
+        user_context=user_context,
+        meal_period=meal if meal else None,
+        user_profile=_user_profile
+    )
+
+    recommendations = result.get("recommendations", [])
+    top_scores = result.get("top_scores", [])
+    stats = result.get("stage_stats", {})
+
+    if not recommendations:
+        return None
+
+    # Format recommendations as markdown
+    recommendation_text = _format_hybrid_recommendations(
+        recommendations=recommendations,
+        user_context=user_context,
+        stats=stats
+    )
+
+    # Add retrieval stats to summaries
+    if stats:
+        summaries["retrieval"] = {
+            "icon": "⚡",
+            "title": "Smart Matching",
+            "points": [
+                f"Analyzed {stats.get('stage1_count', 0)} dishes",
+                f"Personalization scoring applied",
+                f"Retrieved in {stats.get('total_ms', 0):.0f}ms"
+            ]
+        }
+
+    return {
+        "agent_summaries": summaries,
+        "recommendation": recommendation_text,
+        "top_scores": [_score_to_dict(s) for s in top_scores[:5]],
+        "stats": stats
+    }
+
+
+def _format_hybrid_recommendations(
+    recommendations: list[dict],
+    user_context: UserContext,
+    stats: dict
+) -> str:
+    """Format hybrid recommendations as markdown."""
+    if not recommendations:
+        return "I couldn't find dishes matching your preferences right now. Try adjusting your criteria."
+
+    lines = ["Here are my top picks for you:\n"]
+
+    for i, rec in enumerate(recommendations, 1):
+        dish_name = rec.get("dish_name", "Unknown")
+        dining_hall = rec.get("dining_hall", "")
+        explanation = rec.get("explanation", "")
+
+        lines.append(f"### {i}. {dish_name}")
+        lines.append(f"📍 **{dining_hall}**")
+        if explanation:
+            lines.append(f"\n{explanation}")
+        lines.append("")
+
+    # Add context-aware closing
+    closing = _generate_closing(user_context)
+    if closing:
+        lines.append(closing)
+
+    return "\n".join(lines)
+
+
+def _generate_closing(user_context: UserContext) -> str:
+    """Generate context-aware closing message."""
+    parts = []
+
+    if user_context.mood:
+        mood_closings = {
+            "happy": "Enjoy your meal! 🎉",
+            "stressed": "Take a moment to enjoy your food and relax.",
+            "tired": "Hope this gives you the energy boost you need!",
+            "grumpy": "Hope this brightens your day!",
+            "adventurous": "Have fun trying something new!"
+        }
+        if user_context.mood.lower() in mood_closings:
+            parts.append(mood_closings[user_context.mood.lower()])
+
+    if user_context.time_constraint == "rush":
+        parts.append("These should be quick options for you!")
+
+    return " ".join(parts) if parts else ""
+
+
+def _score_to_dict(score: DishScore) -> dict:
+    """Convert DishScore to dict for JSON serialization."""
+    return {
+        "dish_id": score.dish_id,
+        "dish_name": score.dish_name,
+        "dining_hall": score.dining_hall,
+        "category": score.category,
+        "total_score": score.total_score,
+        "taste_score": score.taste_score,
+        "craving_score": score.craving_score,
+        "mood_score": score.mood_score,
+        "is_liked": score.is_liked,
+        "is_new": score.is_new
+    }
+
+
+def _get_legacy_recommendation(
+    query: str,
+    meal: str,
+    context: dict,
+    summaries: dict,
+    question_context: Optional[dict],
+    history,
+    llm
+) -> dict:
+    """
+    Legacy LLM-only recommendation (fallback).
+    """
+    # Build the comprehensive prompt with question context
+    system_prompt = build_recommendation_prompt(context, meal, question_context)
+
+    # Build messages
+    messages = [SystemMessage(content=system_prompt)]
+
+    # Add conversation history (last 4 messages max)
+    for msg in history.messages[-4:]:
+        messages.append(msg)
+
+    # Add current request
+    if meal:
+        user_message = f"Please recommend food for {meal}."
+    else:
+        user_message = "Please recommend food for whatever meal is currently available."
+    messages.append(HumanMessage(content=user_message))
+
+    # Get response from LLM
+    response = llm.invoke(messages)
+    response_text = response.content
+
+    # Update history
+    history.add_user_message(query)
+    history.add_ai_message(response_text)
+
+    return {
+        "agent_summaries": summaries,
+        "recommendation": response_text
+    }
 
 
 def clear_orchestrator_history(session_id: str) -> None:

@@ -222,6 +222,12 @@ def build_system_prompt(command_type: str, meal: str = "") -> str:
 
     base_prompt = f"""You are BerkeleyBites AI, a food recommendation assistant for UC Berkeley dining halls.
 
+CRITICAL RULES:
+- ONLY recommend dishes from the menu provided below
+- NEVER search the web or use external information
+- NEVER include dates, times, or timestamps in your response
+- If asked about something not on the menu, politely redirect to available options
+
 ## Current User Context
 - Dietary Profile: {user_profile}
 - Feedback Status: {feedback_stats}
@@ -273,9 +279,21 @@ Explain whether the requested dish is a good choice for this user based on their
 Find dishes on today's menu that are similar to what the user asked about. Consider flavor profiles, ingredients, and cooking style."""
 
     else:  # general/chat
-        base_prompt += """
+        menu = get_menu_str()
+        base_prompt += f"""
+## Today's Menu
+{menu}
+
 ## Your Task
-Respond helpfully to the user. If they're answering a preference question you asked, acknowledge their answer warmly, save that preference mentally, and then either ask another question or provide recommendations based on what you know."""
+Respond helpfully to the user about UC Berkeley dining options.
+
+If they're asking about:
+- Food recommendations → Suggest using /recommend or provide quick suggestions from today's menu
+- Specific dishes → Check if it's on today's menu and respond accordingly
+- General questions about dining → Answer based on the menu data provided above
+- Anything unrelated to UC Berkeley dining → Politely explain you can only help with UC Berkeley dining hall food recommendations
+
+If they're answering a preference question, acknowledge their answer and provide recommendations based on today's menu."""
 
     base_prompt += """
 

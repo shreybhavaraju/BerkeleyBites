@@ -9,7 +9,6 @@ import type { AgentStep } from '../types';
 
 const INITIAL_AGENT_STEPS: AgentStep[] = [
   { id: 'mood', label: 'Checking your mood', status: 'pending' },
-  { id: 'weather', label: 'Getting Berkeley weather', status: 'pending' },
   { id: 'preferences', label: 'Reviewing your taste history', status: 'pending' },
   { id: 'menu', label: 'Finding matching dishes', status: 'pending' },
   { id: 'recommend', label: 'Generating recommendation', status: 'pending' },

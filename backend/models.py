@@ -157,12 +157,3 @@ class RecommendationResponse(BaseModel):
     session_id: str
 
 
-# ===========================================
-# Weather Models
-# ===========================================
-
-class WeatherResponse(BaseModel):
-    """Current weather information."""
-    temperature_f: float
-    conditions: str
-    food_suggestion: str

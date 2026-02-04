@@ -20,9 +20,14 @@ export function QuestionMessage({
   const isAnswered = !!answeredValue;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-      <p className="text-sm text-gray-700 mb-3">{questionText}</p>
-      <div className="flex flex-wrap gap-2">
+    <div className="bg-white border border-slate-border rounded-xl p-4 shadow-sm">
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-8 h-8 bg-berkeley-gold/20 rounded-lg flex items-center justify-center flex-shrink-0">
+          <span className="text-sm">❓</span>
+        </div>
+        <p className="text-sm text-gray-700 leading-relaxed pt-1">{questionText}</p>
+      </div>
+      <div className="flex flex-wrap gap-2 pl-11">
         {options.map((option) => {
           const isSelected = answeredValue === option.value;
           return (
@@ -31,18 +36,18 @@ export function QuestionMessage({
               onClick={() => !isAnswered && onAnswer(questionId, option.value)}
               disabled={disabled || isAnswered}
               className={`
-                px-3 py-2 rounded-lg text-sm transition-all
+                px-4 py-2 rounded-lg text-sm font-medium transition-all
                 ${
                   isSelected
-                    ? 'bg-berkeley text-white border-berkeley'
+                    ? 'bg-berkeley text-white shadow-md'
                     : isAnswered
-                    ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                    : 'bg-gray-50 hover:bg-berkeley/10 border-gray-200 hover:border-berkeley/30'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-slate-warm hover:bg-berkeley/10 text-gray-700 hover:text-berkeley border border-slate-border hover:border-berkeley/30'
                 }
-                border disabled:opacity-50
+                disabled:opacity-50
               `}
             >
-              {option.emoji && <span className="mr-1">{option.emoji}</span>}
+              {option.emoji && <span className="mr-1.5">{option.emoji}</span>}
               {option.label}
             </button>
           );

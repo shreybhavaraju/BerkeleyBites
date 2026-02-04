@@ -11,42 +11,74 @@ export function ChatPanel() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Scroll within the chat container only, not the entire page
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [messages, agentSteps]);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-      <div className="px-4 py-3 bg-berkeley border-b border-berkeley-light">
-        <h3 className="font-medium text-white flex items-center gap-2">
-          <span className="w-6 h-6 bg-berkeley-gold rounded-full flex items-center justify-center text-sm">
-            🤖
-          </span>
-          <span>AI Assistant</span>
-          <span className="text-xs text-white/60 font-normal ml-auto">Powered by Perplexity</span>
-        </h3>
+    <div className="bg-white rounded-2xl overflow-hidden shadow-lg border border-slate-border">
+      {/* Header */}
+      <div className="relative bg-berkeley px-5 py-4">
+        {/* Decorative pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-berkeley-gold rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-berkeley-gold rounded-full translate-y-1/2 -translate-x-1/2" />
+        </div>
+
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-berkeley-gold rounded-xl flex items-center justify-center shadow-md animate-pulse-gold">
+              <span className="text-lg">🤖</span>
+            </div>
+            <div>
+              <h3 className="font-bold text-white font-display text-lg">AI Food Assistant</h3>
+              <p className="text-white/60 text-xs">Personalized recommendations just for you</p>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white/10 rounded-full">
+            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            <span className="text-white/80 text-xs font-medium">Online</span>
+          </div>
+        </div>
       </div>
 
       {/* Messages area */}
-      <div ref={messagesContainerRef} className="h-80 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
+      <div
+        ref={messagesContainerRef}
+        className="h-80 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-slate-warm to-white"
+      >
         {messages.length === 0 && !isRecommending ? (
-          <div className="text-center py-8">
-            <div className="w-12 h-12 bg-berkeley/10 rounded-full flex items-center justify-center mx-auto mb-3">
-              <span className="text-2xl">💬</span>
+          <div className="text-center py-10">
+            <div className="w-16 h-16 bg-berkeley/5 rounded-2xl flex items-center justify-center mx-auto mb-4 border-2 border-dashed border-berkeley/20">
+              <span className="text-3xl">💬</span>
             </div>
-            <p className="text-sm text-gray-600">Ask me for personalized food recommendations!</p>
-            <p className="text-xs mt-2 text-gray-400">
-              Try: <span className="font-mono bg-berkeley/10 px-1.5 py-0.5 rounded text-berkeley">/recommend lunch</span>
+            <h4 className="font-semibold text-berkeley font-display text-lg mb-1">
+              What are you craving?
+            </h4>
+            <p className="text-gray-500 text-sm mb-4">
+              Ask me for personalized food recommendations!
             </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                onClick={() => sendMessage('/recommend')}
+                className="px-4 py-2 bg-berkeley text-white text-sm font-medium rounded-lg hover:bg-berkeley-light transition-colors"
+              >
+                Get Recommendations
+              </button>
+              <button
+                onClick={() => sendMessage('/help')}
+                className="px-4 py-2 bg-berkeley-gold/20 text-berkeley text-sm font-medium rounded-lg hover:bg-berkeley-gold/30 transition-colors"
+              >
+                See Commands
+              </button>
+            </div>
           </div>
         ) : (
           messages.map((message, index) => {
-            // Render recommendation messages
             if (message.role === 'assistant' && message.isRecommendation && message.agentSummaries) {
               return (
-                <div key={index} className="flex justify-start">
+                <div key={index} className="flex justify-start animate-fade-in">
                   <div className="max-w-[95%]">
                     <RecommendationMessage
                       agentSummaries={message.agentSummaries}
@@ -57,10 +89,9 @@ export function ChatPanel() {
               );
             }
 
-            // Render question messages
             if (message.role === 'assistant' && message.isQuestion && message.questionId && message.options) {
               return (
-                <div key={index} className="flex justify-start">
+                <div key={index} className="flex justify-start animate-fade-in">
                   <div className="max-w-[85%]">
                     <QuestionMessage
                       questionId={message.questionId}
@@ -75,43 +106,41 @@ export function ChatPanel() {
               );
             }
 
-            // Render regular chat messages
             return <ChatMessage key={index} message={message} />;
           })
         )}
 
-        {/* Show agent progress animation during /recommend */}
+        {/* Agent progress */}
         {isRecommending && agentSteps.length > 0 && (
-          <div className="flex justify-start">
+          <div className="flex justify-start animate-fade-in">
             <div className="max-w-[85%]">
               <AgentProgress steps={agentSteps} />
             </div>
           </div>
         )}
 
-        {/* Show simple loading for non-recommend commands */}
+        {/* Simple loading */}
         {isLoading && !isRecommending && (
           <div className="flex justify-start">
-            <div className="bg-white border border-gray-200 rounded-lg px-4 py-2 shadow-sm">
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-berkeley-gold rounded-full animate-bounce" />
+            <div className="bg-white rounded-xl px-4 py-3 shadow-sm border border-slate-border">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-berkeley-gold rounded-full animate-bounce" />
                 <span
-                  className="w-2 h-2 bg-berkeley-gold rounded-full animate-bounce"
-                  style={{ animationDelay: '0.1s' }}
+                  className="w-2.5 h-2.5 bg-berkeley-gold rounded-full animate-bounce"
+                  style={{ animationDelay: '0.15s' }}
                 />
                 <span
-                  className="w-2 h-2 bg-berkeley-gold rounded-full animate-bounce"
-                  style={{ animationDelay: '0.2s' }}
+                  className="w-2.5 h-2.5 bg-berkeley-gold rounded-full animate-bounce"
+                  style={{ animationDelay: '0.3s' }}
                 />
               </div>
             </div>
           </div>
         )}
-
       </div>
 
       {/* Input area */}
-      <div className="p-4 border-t border-gray-200 bg-white">
+      <div className="p-4 border-t border-slate-border bg-white">
         <ChatInput onSend={sendMessage} isLoading={isLoading} />
       </div>
     </div>

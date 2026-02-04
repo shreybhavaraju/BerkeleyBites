@@ -139,13 +139,6 @@ export interface AgentStep {
   status: AgentStepStatus;
 }
 
-// Weather Types
-export interface Weather {
-  temperature_f: number;
-  conditions: string;
-  food_suggestion: string;
-}
-
 // API Response Types
 export interface ApiError {
   detail: string;
