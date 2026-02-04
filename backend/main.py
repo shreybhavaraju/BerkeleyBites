@@ -7,7 +7,7 @@ Data is stored in Supabase (PostgreSQL).
 
 import logging
 import os
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from contextlib import asynccontextmanager
 
@@ -72,6 +72,53 @@ MOOD_GUIDANCE = {
         "food_suggestion": "Perfect time to try something new! Look for unique dishes or international cuisine.",
     },
 }
+
+
+# ===========================================
+# Time-Based Meal Detection
+# ===========================================
+
+def get_current_meal_period() -> str:
+    """
+    Determine the current meal period based on time of day.
+
+    Uses Pacific time (Berkeley's timezone) for accurate detection.
+    Falls back to system local time if timezone conversion fails.
+
+    Meal periods (based on Berkeley dining hours):
+    - Breakfast: until 10:30 AM
+    - Lunch: 10:30 AM - 3:00 PM
+    - Dinner: 3:00 PM - 9:00 PM
+    - After 9 PM: defaults to Dinner (late night)
+
+    Returns:
+        Meal period string (e.g., "Lunch", "Dinner")
+    """
+    try:
+        # Try to get Pacific time
+        from zoneinfo import ZoneInfo
+        pacific = ZoneInfo("America/Los_Angeles")
+        now = datetime.now(pacific)
+    except Exception:
+        # Fallback to local time
+        now = datetime.now()
+
+    hour = now.hour
+    minute = now.minute
+    time_decimal = hour + minute / 60.0
+
+    if time_decimal < 10.5:
+        # Before 10:30 AM - Breakfast
+        return "Breakfast"
+    elif time_decimal < 15.0:
+        # 10:30 AM - 3:00 PM - Lunch
+        return "Lunch"
+    elif time_decimal < 21.0:
+        # 3:00 PM - 9:00 PM - Dinner
+        return "Dinner"
+    else:
+        # After 9 PM - Late night, show Dinner
+        return "Dinner"
 
 
 # ===========================================
@@ -308,7 +355,8 @@ async def get_menu(
         filtered_df = filtered_df[filtered_df['dining_hall'].str.lower() == hall.lower()]
 
     if meal:
-        filtered_df = filtered_df[filtered_df['meal_period'].str.lower() == meal.lower()]
+        # Use contains match to handle "Spring - Lunch" format from scraper
+        filtered_df = filtered_df[filtered_df['meal_period'].str.lower().str.contains(meal.lower())]
 
     if category:
         filtered_df = filtered_df[filtered_df['category'].str.lower() == category.lower()]
@@ -538,6 +586,11 @@ async def chat(
     if command.lower().startswith("/recommend"):
         parts = command.split(maxsplit=1)
         meal = parts[1] if len(parts) > 1 else ""
+
+        # Auto-detect meal period if not specified
+        if not meal:
+            meal = get_current_meal_period()
+            logging.info(f"Auto-detected meal period: {meal}")
 
         # Initialize pending recommendation with empty answers
         _pending_recommendations[session_id] = {
