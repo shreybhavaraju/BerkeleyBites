@@ -1,177 +1,33 @@
 """
-Unit tests for BerkeleyBites Multi-Agent System
+Unit tests for BerkeleyBites Recommendation System
+
+Tests the core components:
+- Orchestrator: set_orchestrator_context, get_recommendation
+- Scoring: compute_dish_score, UserContext
+- UI Summaries: _build_summaries
 """
 
 import pytest
-import pandas as pd
-from datetime import date, datetime
 import sys
 import os
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.agents.food_availability_agent import (
-    get_available_dishes,
-    get_menu_summary,
-    set_menu_data,
-)
-from backend.agents.taste_preferences_agent import (
-    get_taste_preferences,
-    get_similar_liked_dishes,
-    set_feedback_data,
-)
 from backend.agents.orchestrator import (
     set_orchestrator_context,
-    get_user_profile_str,
-    gather_agent_context,
+    _build_summaries,
+)
+from backend.agents.scoring import (
+    UserContext,
+    FeedbackSummary,
+    compute_dish_score,
 )
 
 
 # ============================================
 # TEST FIXTURES
 # ============================================
-
-@pytest.fixture
-def sample_menu_df():
-    """Create a sample menu DataFrame for testing."""
-    return pd.DataFrame([
-        {
-            "dish_id": "dish_001",
-            "dish_name": "Vegan Buddha Bowl",
-            "dining_hall": "Crossroads",
-            "meal_period": "Lunch",
-            "category": "Entrees",
-            "is_vegan": True,
-            "is_vegetarian": True,
-            "is_halal": True,
-            "is_kosher": False,
-            "has_gluten": False,
-            "has_milk": False,
-            "has_egg": False,
-            "has_fish": False,
-            "has_pork": False,
-            "has_shellfish": False,
-            "has_tree_nuts": False,
-            "has_soybeans": True,
-        },
-        {
-            "dish_id": "dish_002",
-            "dish_name": "Grilled Chicken Sandwich",
-            "dining_hall": "Crossroads",
-            "meal_period": "Lunch",
-            "category": "Grill",
-            "is_vegan": False,
-            "is_vegetarian": False,
-            "is_halal": True,
-            "is_kosher": False,
-            "has_gluten": True,
-            "has_milk": False,
-            "has_egg": False,
-            "has_fish": False,
-            "has_pork": False,
-            "has_shellfish": False,
-            "has_tree_nuts": False,
-            "has_soybeans": False,
-        },
-        {
-            "dish_id": "dish_003",
-            "dish_name": "Tomato Soup",
-            "dining_hall": "Cafe 3",
-            "meal_period": "Dinner",
-            "category": "Soups",
-            "is_vegan": True,
-            "is_vegetarian": True,
-            "is_halal": True,
-            "is_kosher": True,
-            "has_gluten": False,
-            "has_milk": False,
-            "has_egg": False,
-            "has_fish": False,
-            "has_pork": False,
-            "has_shellfish": False,
-            "has_tree_nuts": False,
-            "has_soybeans": False,
-        },
-        {
-            "dish_id": "dish_004",
-            "dish_name": "Pepperoni Pizza",
-            "dining_hall": "Cafe 3",
-            "meal_period": "Dinner",
-            "category": "Pizza",
-            "is_vegan": False,
-            "is_vegetarian": False,
-            "is_halal": False,
-            "is_kosher": False,
-            "has_gluten": True,
-            "has_milk": True,
-            "has_egg": False,
-            "has_fish": False,
-            "has_pork": True,
-            "has_shellfish": False,
-            "has_tree_nuts": False,
-            "has_soybeans": False,
-        },
-        {
-            "dish_id": "dish_005",
-            "dish_name": "Caesar Salad",
-            "dining_hall": "Crossroads",
-            "meal_period": "Lunch",
-            "category": "Salads",
-            "is_vegan": False,
-            "is_vegetarian": True,
-            "is_halal": True,
-            "is_kosher": False,
-            "has_gluten": True,
-            "has_milk": True,
-            "has_egg": True,
-            "has_fish": False,
-            "has_pork": False,
-            "has_shellfish": False,
-            "has_tree_nuts": False,
-            "has_soybeans": False,
-        },
-    ])
-
-
-@pytest.fixture
-def sample_feedback_df():
-    """Create a sample feedback DataFrame for testing."""
-    return pd.DataFrame([
-        {
-            "user_id": "test_user_123",
-            "dish_id": "dish_001",
-            "dish_name": "Vegan Buddha Bowl",
-            "liked": 1,
-            "created_at": datetime.now().isoformat(),
-            "date": str(date.today()),
-        },
-        {
-            "user_id": "test_user_123",
-            "dish_id": "dish_003",
-            "dish_name": "Tomato Soup",
-            "liked": 1,
-            "created_at": datetime.now().isoformat(),
-            "date": str(date.today()),
-        },
-        {
-            "user_id": "test_user_123",
-            "dish_id": "dish_004",
-            "dish_name": "Pepperoni Pizza",
-            "liked": 0,
-            "created_at": datetime.now().isoformat(),
-            "date": str(date.today()),
-        },
-        {
-            "user_id": "test_user_123",
-            "dish_id": "dish_002",
-            "dish_name": "Grilled Chicken Sandwich",
-            "liked": 1,
-            "created_at": datetime.now().isoformat(),
-            "date": str(date.today()),
-        },
-    ])
-
 
 @pytest.fixture
 def sample_user_profile():
@@ -190,148 +46,43 @@ def sample_user_profile():
     }
 
 
-# ============================================
-# FOOD AVAILABILITY AGENT TESTS
-# ============================================
-
-class TestFoodAvailabilityAgent:
-    """Tests for the Food Availability Agent."""
-
-    def test_get_available_dishes_no_filter(self, sample_menu_df):
-        """Test getting all dishes without filters."""
-        set_menu_data(sample_menu_df)
-        result = get_available_dishes.invoke({})
-
-        assert "Found 5 dishes" in result
-        assert "Vegan Buddha Bowl" in result
-        assert "Grilled Chicken Sandwich" in result
-
-    def test_get_available_dishes_meal_filter(self, sample_menu_df):
-        """Test filtering by meal period."""
-        set_menu_data(sample_menu_df)
-        result = get_available_dishes.invoke({"meal_period": "Lunch"})
-
-        assert "Vegan Buddha Bowl" in result
-        assert "Grilled Chicken Sandwich" in result
-        assert "Tomato Soup" not in result  # Dinner only
-
-    def test_get_available_dishes_vegan_filter(self, sample_menu_df):
-        """Test filtering for vegan dishes."""
-        set_menu_data(sample_menu_df)
-        result = get_available_dishes.invoke({"is_vegan": True})
-
-        assert "Vegan Buddha Bowl" in result
-        assert "Tomato Soup" in result
-        assert "Grilled Chicken" not in result
-        assert "VEGAN" in result
-
-    def test_get_available_dishes_vegetarian_filter(self, sample_menu_df):
-        """Test filtering for vegetarian dishes."""
-        set_menu_data(sample_menu_df)
-        result = get_available_dishes.invoke({"is_vegetarian": True})
-
-        assert "Caesar Salad" in result
-        assert "VEGETARIAN" in result
-
-    def test_get_available_dishes_dining_hall_filter(self, sample_menu_df):
-        """Test filtering by dining hall."""
-        set_menu_data(sample_menu_df)
-        result = get_available_dishes.invoke({"dining_hall": "Cafe 3"})
-
-        assert "Tomato Soup" in result
-        assert "Pepperoni Pizza" in result
-        assert "Vegan Buddha Bowl" not in result  # Crossroads only
-
-    def test_get_menu_summary(self, sample_menu_df):
-        """Test menu summary generation."""
-        set_menu_data(sample_menu_df)
-        result = get_menu_summary.invoke({})
-
-        assert "Total Dishes Available: 5" in result
-        assert "Crossroads" in result
-        assert "Cafe 3" in result
-        assert "Vegan dishes:" in result
-        assert "Vegetarian dishes:" in result
-
-    def test_no_menu_data(self):
-        """Test handling when no menu data is set."""
-        set_menu_data(pd.DataFrame())
-        result = get_available_dishes.invoke({})
-
-        assert "No menu data available" in result
-
-    def test_limit_parameter(self, sample_menu_df):
-        """Test that limit parameter works."""
-        set_menu_data(sample_menu_df)
-        result = get_available_dishes.invoke({"limit": 2})
-
-        assert "showing first 2" in result
+@pytest.fixture
+def sample_dish():
+    """Create a sample dish for testing (dish_id=1 matches liked_dish_ids in sample_feedback_summary)."""
+    return {
+        "dish_id": 1,
+        "dish_name": "Vegan Buddha Bowl",
+        "dining_hall": "Crossroads",
+        "meal_period": "Lunch",
+        "category": "Entrees",
+        "is_vegan": True,
+        "is_vegetarian": True,
+    }
 
 
-# ============================================
-# TASTE PREFERENCES AGENT TESTS
-# ============================================
+@pytest.fixture
+def sample_user_context():
+    """Create a sample user context for testing."""
+    return UserContext(
+        user_id="test_user",
+        mood="happy",
+        craving="healthy",
+        spice_level="mild",
+        time_constraint="normal",
+        meal_period="Lunch"
+    )
 
-class TestTastePreferencesAgent:
-    """Tests for the Taste Preferences Agent."""
 
-    def test_get_taste_preferences_with_history(self, sample_feedback_df, sample_menu_df):
-        """Test getting preferences with feedback history."""
-        set_feedback_data(sample_feedback_df, "test_user_123", sample_menu_df)
-        result = get_taste_preferences.invoke({})
-
-        assert "Liked Dishes" in result
-        assert "Vegan Buddha Bowl" in result
-        assert "Disliked Dishes" in result
-        assert "Pepperoni Pizza" in result
-
-    def test_get_taste_preferences_new_user(self):
-        """Test preferences for new user with no history."""
-        set_feedback_data(pd.DataFrame(), "new_user", None)
-        result = get_taste_preferences.invoke({})
-
-        assert "No feedback history" in result or "new user" in result.lower()
-
-    def test_get_taste_preferences_insufficient_history(self, sample_menu_df):
-        """Test with insufficient feedback count."""
-        # Create feedback with only 2 entries (below threshold)
-        small_feedback = pd.DataFrame([
-            {
-                "user_id": "test_user",
-                "dish_id": "dish_001",
-                "dish_name": "Test Dish",
-                "liked": 1,
-                "created_at": datetime.now().isoformat(),
-                "date": str(date.today()),
-            },
-            {
-                "user_id": "test_user",
-                "dish_id": "dish_002",
-                "dish_name": "Another Dish",
-                "liked": 0,
-                "created_at": datetime.now().isoformat(),
-                "date": str(date.today()),
-            },
-        ])
-        set_feedback_data(small_feedback, "test_user", sample_menu_df)
-        result = get_taste_preferences.invoke({})
-
-        assert "Limited feedback" in result or "Need at least" in result
-
-    def test_get_similar_liked_dishes(self, sample_feedback_df, sample_menu_df):
-        """Test finding similar dishes."""
-        set_feedback_data(sample_feedback_df, "test_user_123", sample_menu_df)
-        result = get_similar_liked_dishes.invoke({})
-
-        # Should suggest dishes or mention preferences
-        assert "Based on" in result or "favorites" in result or "No liked dishes" in result
-
-    def test_get_similar_liked_dishes_no_history(self):
-        """Test similar dishes with no history."""
-        set_feedback_data(pd.DataFrame(), "new_user", pd.DataFrame())
-        result = get_similar_liked_dishes.invoke({})
-
-        assert "No feedback history" in result
+@pytest.fixture
+def sample_feedback_summary():
+    """Create a sample feedback summary for testing."""
+    return FeedbackSummary(
+        liked_dish_ids={1, 3},  # dish_ids for Vegan Buddha Bowl, Tomato Soup
+        disliked_dish_ids={4},  # dish_id for Pepperoni Pizza
+        liked_categories={"Entrees": 2, "Soups": 1},
+        disliked_categories={"Pizza": 1},
+        total_ratings=4
+    )
 
 
 # ============================================
@@ -341,71 +92,161 @@ class TestTastePreferencesAgent:
 class TestOrchestrator:
     """Tests for the Orchestrator."""
 
-    def test_set_orchestrator_context(self, sample_menu_df, sample_feedback_df, sample_user_profile):
+    def test_set_orchestrator_context(self, sample_user_profile):
         """Test setting orchestrator context."""
         # Should not raise any exceptions
         set_orchestrator_context(
-            menu_df=sample_menu_df,
-            feedback_df=sample_feedback_df,
             user_profile=sample_user_profile,
-            user_id="test_user_123",
-            user_mood="happy"
+            user_id="test_user_123"
         )
 
-    def test_get_user_profile_str_no_restrictions(self, sample_menu_df, sample_feedback_df, sample_user_profile):
-        """Test profile string with no restrictions."""
+    def test_set_orchestrator_context_with_legacy_params(self, sample_user_profile):
+        """Test that legacy parameters are accepted but ignored."""
+        # Should not raise - **kwargs handles extra params
         set_orchestrator_context(
-            menu_df=sample_menu_df,
-            feedback_df=sample_feedback_df,
             user_profile=sample_user_profile,
             user_id="test_user",
-            user_mood="happy"
+            menu_df="ignored",
+            feedback_df="ignored",
+            user_mood="ignored"
         )
-        result = get_user_profile_str()
 
-        assert result == "No dietary restrictions"
 
-    def test_get_user_profile_str_vegan(self, sample_menu_df, sample_feedback_df):
-        """Test profile string for vegan user."""
-        vegan_profile = {
-            "is_vegan": True,
-            "is_vegetarian": False,
-            "avoid_gluten": True,
+# ============================================
+# UI SUMMARIES TESTS
+# ============================================
+
+class TestBuildSummaries:
+    """Tests for the _build_summaries function."""
+
+    def test_build_summaries_happy_mood(self):
+        """Test summaries for happy mood."""
+        question_context = {"mood": "happy"}
+        summaries = _build_summaries(question_context, "Lunch")
+
+        assert "mood" in summaries
+        assert summaries["mood"]["title"] == "Mood Analysis"
+        assert "happy" in summaries["mood"]["points"][0].lower()
+
+    def test_build_summaries_stressed_mood(self):
+        """Test summaries for stressed mood."""
+        question_context = {"mood": "stressed"}
+        summaries = _build_summaries(question_context, "Dinner")
+
+        assert "stressed" in summaries["mood"]["points"][0].lower()
+
+    def test_build_summaries_with_craving(self):
+        """Test summaries include craving info."""
+        question_context = {"mood": "happy", "craving": "comfort"}
+        summaries = _build_summaries(question_context, "Lunch")
+
+        assert "craving" in summaries
+        assert "comfort" in summaries["craving"]["points"][0].lower()
+
+    def test_build_summaries_with_spice(self):
+        """Test summaries include spice preference."""
+        question_context = {"mood": "happy", "spice_level": "spicy"}
+        summaries = _build_summaries(question_context, "Lunch")
+
+        assert "spice" in summaries
+        assert "heat" in summaries["spice"]["points"][0].lower()
+
+    def test_build_summaries_with_time(self):
+        """Test summaries include time constraint."""
+        question_context = {"mood": "happy", "time_constraint": "rush"}
+        summaries = _build_summaries(question_context, "Lunch")
+
+        assert "time" in summaries
+        assert "hurry" in summaries["time"]["points"][0].lower()
+
+    def test_build_summaries_empty_context(self):
+        """Test summaries with empty context."""
+        summaries = _build_summaries({}, "Lunch")
+
+        assert "mood" in summaries
+        assert summaries["mood"]["points"][0] == "Ready for a great meal"
+
+
+# ============================================
+# SCORING TESTS
+# ============================================
+
+class TestScoring:
+    """Tests for the scoring module."""
+
+    def test_compute_dish_score_basic(self, sample_dish, sample_user_context, sample_feedback_summary):
+        """Test basic dish scoring."""
+        score = compute_dish_score(
+            dish=sample_dish,
+            context=sample_user_context,
+            feedback=sample_feedback_summary,
+            embedding_similarity=0.8
+        )
+
+        assert score.dish_name == "Vegan Buddha Bowl"
+        assert score.total_score > 0
+        assert score.total_score <= 1.0
+
+    def test_compute_dish_score_liked_dish(self, sample_dish, sample_user_context, sample_feedback_summary):
+        """Test scoring for a previously liked dish."""
+        score = compute_dish_score(
+            dish=sample_dish,
+            context=sample_user_context,
+            feedback=sample_feedback_summary,
+            embedding_similarity=0.8
+        )
+
+        # Liked dish should have positive taste score
+        assert score.taste_score > 0
+        assert score.is_liked == True
+
+    def test_compute_dish_score_new_dish(self, sample_user_context, sample_feedback_summary):
+        """Test scoring for a new dish."""
+        new_dish = {
+            "dish_id": 999,
+            "dish_name": "New Mystery Dish",
+            "dining_hall": "Cafe 3",
+            "meal_period": "Lunch",
+            "category": "Specials",
         }
-        set_orchestrator_context(
-            menu_df=sample_menu_df,
-            feedback_df=sample_feedback_df,
-            user_profile=vegan_profile,
-            user_id="test_user",
-            user_mood="happy"
-        )
-        result = get_user_profile_str()
 
-        assert "VEGAN" in result
-        assert "gluten" in result
-
-    def test_gather_agent_context(self, sample_menu_df, sample_feedback_df, sample_user_profile):
-        """Test gathering context from all agents."""
-        set_orchestrator_context(
-            menu_df=sample_menu_df,
-            feedback_df=sample_feedback_df,
-            user_profile=sample_user_profile,
-            user_id="test_user_123",
-            user_mood="happy"
+        score = compute_dish_score(
+            dish=new_dish,
+            context=sample_user_context,
+            feedback=sample_feedback_summary,
+            embedding_similarity=0.5
         )
 
-        # gather_agent_context now takes question_context for mood
-        context = gather_agent_context(meal="Lunch", question_context={"mood": "happy"})
+        assert score.is_new == True
+        assert score.is_liked == False
 
-        assert "mood" in context
-        assert "preferences" in context
-        assert "dishes" in context
+    def test_user_context_creation(self):
+        """Test UserContext dataclass creation."""
+        context = UserContext(
+            user_id="user123",
+            mood="tired",
+            craving="filling",
+            spice_level="medium",
+            time_constraint="leisurely",
+            meal_period="Dinner"
+        )
 
-        # Mood should reflect happy (passed through question_context)
-        assert context["mood"] == "happy"
+        assert context.user_id == "user123"
+        assert context.mood == "tired"
+        assert context.craving == "filling"
 
-        # Dishes should be filtered for lunch
-        assert "Vegan Buddha Bowl" in context["dishes"]
+    def test_feedback_summary_creation(self):
+        """Test FeedbackSummary dataclass creation."""
+        summary = FeedbackSummary(
+            liked_dish_ids={1, 2},
+            disliked_dish_ids={3},
+            liked_categories={"Entrees": 2},
+            disliked_categories={"Grill": 1},
+            total_ratings=3
+        )
+
+        assert len(summary.liked_dish_ids) == 2
+        assert summary.total_ratings == 3
 
 
 # ============================================
@@ -413,46 +254,74 @@ class TestOrchestrator:
 # ============================================
 
 class TestIntegration:
-    """Integration tests for the multi-agent system."""
+    """Integration tests for the recommendation system."""
 
-    def test_full_context_gathering(self, sample_menu_df, sample_feedback_df, sample_user_profile):
-        """Test full context gathering flow."""
+    def test_full_scoring_flow(self, sample_user_profile):
+        """Test the full scoring flow."""
+        # Set up context
         set_orchestrator_context(
-            menu_df=sample_menu_df,
-            feedback_df=sample_feedback_df,
             user_profile=sample_user_profile,
-            user_id="test_user_123",
-            user_mood="tired"
+            user_id="test_user"
         )
 
-        # Mood is now passed through question_context
-        context = gather_agent_context(meal="", question_context={"mood": "tired"})
-
-        # All context should be gathered
-        assert len(context) == 3
-        assert all(key in context for key in ["mood", "preferences", "dishes"])
-
-        # Mood should be tired (from question_context)
-        assert context["mood"] == "tired"
-
-    def test_mood_affects_context(self, sample_menu_df, sample_feedback_df, sample_user_profile):
-        """Test that mood changes affect the context."""
-        set_orchestrator_context(
-            menu_df=sample_menu_df,
-            feedback_df=sample_feedback_df,
-            user_profile=sample_user_profile,
+        # Create user context
+        user_context = UserContext(
             user_id="test_user",
-            user_mood="stressed"
+            mood="happy",
+            craving="healthy",
+            spice_level="mild",
+            time_constraint="normal",
+            meal_period="Lunch"
         )
 
-        # Mood is now passed through question_context
-        context_stressed = gather_agent_context(question_context={"mood": "stressed"})
-        context_adventurous = gather_agent_context(question_context={"mood": "adventurous"})
+        # Create feedback summary
+        feedback = FeedbackSummary(
+            liked_dish_ids=set(),
+            disliked_dish_ids=set(),
+            liked_categories={},
+            disliked_categories={},
+            total_ratings=0
+        )
 
-        # Contexts should have different moods
-        assert context_stressed["mood"] != context_adventurous["mood"]
-        assert context_stressed["mood"] == "stressed"
-        assert context_adventurous["mood"] == "adventurous"
+        # Score a dish
+        dish = {
+            "dish_id": 1,
+            "dish_name": "Test Dish",
+            "dining_hall": "Crossroads",
+            "meal_period": "Lunch",
+            "category": "Entrees",
+        }
+
+        score = compute_dish_score(
+            dish=dish,
+            context=user_context,
+            feedback=feedback,
+            embedding_similarity=0.7
+        )
+
+        assert score.dish_name == "Test Dish"
+        assert 0 <= score.total_score <= 1
+
+    def test_summaries_match_context(self):
+        """Test that summaries correctly reflect question context."""
+        question_context = {
+            "mood": "adventurous",
+            "craving": "healthy",
+            "spice_level": "spicy",
+            "time_constraint": "leisurely"
+        }
+
+        summaries = _build_summaries(question_context, "Dinner")
+
+        # All context items should be represented
+        assert "mood" in summaries
+        assert "craving" in summaries
+        assert "spice" in summaries
+        assert "time" in summaries
+
+        # Values should match
+        assert "adventurous" in summaries["mood"]["points"][0].lower()
+        assert "healthy" in summaries["craving"]["points"][0].lower()
 
 
 if __name__ == "__main__":
