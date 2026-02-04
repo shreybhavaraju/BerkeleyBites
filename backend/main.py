@@ -152,25 +152,6 @@ def load_menu_data() -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def load_feedback(user_id: str) -> pd.DataFrame:
-    """Load existing feedback from Supabase for a specific user.
-
-    Args:
-        user_id: Required user ID to load feedback for.
-                 Never loads all users' feedback for security.
-    """
-    feedback = db.get_user_feedback(user_id)
-
-    if feedback:
-        df = pd.DataFrame(feedback)
-        # Rename columns for compatibility
-        if 'rating_date' in df.columns:
-            df['date'] = df['rating_date']
-        return df
-
-    return pd.DataFrame(columns=['user_id', 'dish_id', 'dish_name', 'liked', 'created_at', 'date'])
-
-
 def save_feedback(user_id: str, dish_id: int, dish_name: str, liked: bool) -> None:
     """Save feedback to Supabase."""
     db.submit_feedback(user_id, dish_id, dish_name, liked)
@@ -241,22 +222,17 @@ def filter_by_profile(df: pd.DataFrame, profile: UserProfile) -> pd.DataFrame:
 
 
 def update_agent_context(user_id: str) -> pd.DataFrame:
-    """Update the agent context and return filtered menu."""
+    """Update the agent context and return filtered menu for API endpoints."""
     menu_df = load_menu_data()
-    feedback_df = load_feedback(user_id)
     profile = get_user_profile(user_id)
-    mood = get_user_mood(user_id)
 
-    # Filter menu by profile
+    # Filter menu by profile (for /api/menu endpoints)
     filtered_df = filter_by_profile(menu_df, profile)
 
-    # Update orchestrator context (handles /recommend with multi-agent system)
+    # Set orchestrator context (hybrid retriever fetches menu/feedback from DB directly)
     set_orchestrator_context(
-        menu_df=filtered_df,
-        feedback_df=feedback_df,
         user_profile=profile.model_dump(),
-        user_id=user_id,
-        user_mood=mood
+        user_id=user_id
     )
 
     return filtered_df
