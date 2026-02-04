@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.chat_history import InMemoryChatMessageHistory
 
 # Import all agent tools
