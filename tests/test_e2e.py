@@ -50,10 +50,10 @@ def full_menu_df():
 def user_feedback_df():
     """Create feedback history for testing."""
     return pd.DataFrame([
-        {"user_id": "e2e_user", "dish_id": "l1", "dish_name": "Chicken Teriyaki Bowl", "liked": 1, "timestamp": datetime.now().isoformat(), "date": str(date.today())},
-        {"user_id": "e2e_user", "dish_id": "l2", "dish_name": "Mediterranean Salad", "liked": 1, "timestamp": datetime.now().isoformat(), "date": str(date.today())},
-        {"user_id": "e2e_user", "dish_id": "l3", "dish_name": "Tomato Basil Soup", "liked": 1, "timestamp": datetime.now().isoformat(), "date": str(date.today())},
-        {"user_id": "e2e_user", "dish_id": "l4", "dish_name": "BBQ Pulled Pork Sandwich", "liked": 0, "timestamp": datetime.now().isoformat(), "date": str(date.today())},
+        {"user_id": "e2e_user", "dish_id": "l1", "dish_name": "Chicken Teriyaki Bowl", "liked": 1, "created_at": datetime.now().isoformat(), "date": str(date.today())},
+        {"user_id": "e2e_user", "dish_id": "l2", "dish_name": "Mediterranean Salad", "liked": 1, "created_at": datetime.now().isoformat(), "date": str(date.today())},
+        {"user_id": "e2e_user", "dish_id": "l3", "dish_name": "Tomato Basil Soup", "liked": 1, "created_at": datetime.now().isoformat(), "date": str(date.today())},
+        {"user_id": "e2e_user", "dish_id": "l4", "dish_name": "BBQ Pulled Pork Sandwich", "liked": 0, "created_at": datetime.now().isoformat(), "date": str(date.today())},
     ])
 
 
