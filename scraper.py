@@ -3,6 +3,8 @@ BerkeleyBites Scraper
 
 Scrapes UC Berkeley dining hall menus and transforms them into a clean DataFrame.
 Combines scraping and transformation into a single module.
+
+Data is stored in Supabase (PostgreSQL).
 """
 
 import os
@@ -10,26 +12,23 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import date
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def is_data_fresh() -> bool:
     """
-    Check if dining_data_clean.csv exists and was scraped today.
+    Check if menu data exists and was scraped today.
 
     Returns:
         True if data is from today, False if stale or missing.
     """
-    csv_path = os.path.join(os.path.dirname(__file__), 'dining_data_clean.csv')
-
-    if not os.path.exists(csv_path):
-        return False
-
     try:
-        df = pd.read_csv(csv_path)
-        if 'scrape_date' not in df.columns or df.empty:
-            return False
-        return df['scrape_date'].iloc[0] == str(date.today())
-    except Exception:
+        from backend.database import is_menu_fresh
+        return is_menu_fresh()
+    except Exception as e:
+        print(f"Database check failed: {e}")
         return False
 
 
@@ -168,7 +167,7 @@ def transform_to_dataframe(dining_data: dict) -> pd.DataFrame:
 
 def scrape_and_transform() -> pd.DataFrame:
     """
-    Main entry point: scrape website, transform data, save to CSV.
+    Main entry point: scrape website, transform data, save to Supabase.
 
     Returns:
         Clean DataFrame ready for use in the app.
@@ -179,18 +178,103 @@ def scrape_and_transform() -> pd.DataFrame:
     # Transform
     df = transform_to_dataframe(data)
 
-    # Save to CSV
-    csv_path = os.path.join(os.path.dirname(__file__), 'dining_data_clean.csv')
-    df.to_csv(csv_path, index=False)
+    # Save to Supabase
+    try:
+        from backend.database import upsert_dishes
+        dishes = df.to_dict('records')
+        count = upsert_dishes(dishes)
+        print(f"Saved {count} dishes to Supabase")
+    except Exception as e:
+        print(f"Failed to save to Supabase: {e}")
+        raise
 
     return df
 
 
+def generate_embeddings_for_new_dishes(batch_size: int = 50) -> int:
+    """
+    Generate embeddings for dishes that don't have them.
+
+    This should be called after scraping to ensure all dishes have embeddings.
+
+    Args:
+        batch_size: Number of dishes to process at once
+
+    Returns:
+        Number of dishes with embeddings generated
+    """
+    try:
+        from backend.database import get_dishes_without_embeddings, batch_update_embeddings
+        from backend.agents.embedding_service import generate_batch_embeddings
+    except ImportError as e:
+        print(f"Cannot generate embeddings - missing dependencies: {e}")
+        return 0
+
+    total_generated = 0
+
+    while True:
+        # Get dishes without embeddings
+        dishes = get_dishes_without_embeddings(limit=batch_size)
+
+        if not dishes:
+            break
+
+        print(f"Generating embeddings for {len(dishes)} dishes...")
+
+        # Generate embeddings
+        results = generate_batch_embeddings(dishes)
+
+        # Format for database update
+        updates = [
+            {
+                "dish_id": dish_id,
+                "embedding": embedding,
+                "embedding_text": text
+            }
+            for dish_id, text, embedding in results
+        ]
+
+        # Update database
+        count = batch_update_embeddings(updates)
+        total_generated += count
+        print(f"  Updated {count} dishes")
+
+        # If we got fewer than batch_size, we're done
+        if len(dishes) < batch_size:
+            break
+
+    return total_generated
+
+
+def scrape_and_generate_embeddings() -> tuple[pd.DataFrame, int]:
+    """
+    Full pipeline: scrape, save, and generate embeddings.
+
+    Returns:
+        Tuple of (DataFrame, number of embeddings generated)
+    """
+    # Scrape and save
+    df = scrape_and_transform()
+
+    # Generate embeddings for new dishes
+    embedding_count = generate_embeddings_for_new_dishes()
+
+    return df, embedding_count
+
+
 if __name__ == "__main__":
+    import sys
+
     print("Scraping Berkeley dining website...")
     df = scrape_and_transform()
-    print(f"Saved {len(df)} dishes to dining_data_clean.csv")
     print(f"\nStatistics:")
+    print(f"  Total dishes: {len(df)}")
     print(f"  Dining halls: {df['dining_hall'].nunique()}")
     print(f"  Vegan options: {df['is_vegan'].sum()}")
     print(f"  Vegetarian options: {df['is_vegetarian'].sum()}")
+
+    # Generate embeddings if requested
+    if "--embeddings" in sys.argv or "-e" in sys.argv:
+        print("\nGenerating embeddings...")
+        count = generate_embeddings_for_new_dishes()
+        print(f"  Generated embeddings for {count} dishes")
